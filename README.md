@@ -2,3 +2,4 @@
 
 2)      进入容器操作        docker exec -it laps-container bash -c "cd /app/ns3-detnet-rdma-main/ns-3.33 && exec bash"
 3)                          docker start laps-container
+4)                        python3 /file-in-ctr/executableFiles/C00003/run.py
