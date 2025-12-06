@@ -1,0 +1,10 @@
+build/
+.lock-waf_*
+compile_commands.json
+*.log
+*.pcap
+*.tr
+results/
+.vscode/
+*.swp
+.DS_Store
