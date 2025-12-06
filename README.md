@@ -2,7 +2,7 @@
 
 2. sudo docker start laps-container
 
-3. python /file-in-ctr/executableFiles/C00001/run.py
+3. python3 /file-in-ctr/executableFiles/C00001/run.py
 
 4. ./waf build
 
