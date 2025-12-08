@@ -4,13 +4,13 @@
 
 6. sudo docker start laps-container
 
+7. 
 
-   
 3. sudo docker exec -it laps-container-try-myself-idea bash -c "cd /app/ns3-detnet-rdma-main/ns-3.33 && exec bash"
    
 5. python3 /file-in-ctr/executableFilesForMyIdea/C00001/run-ForMyIdea.py
 
-
+6. 
 
 
 8. ./waf build
