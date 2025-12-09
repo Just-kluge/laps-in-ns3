@@ -1975,6 +1975,44 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 		}
 		else if (ch.l3Prot == L3ProtType::NACK)
 		{ 
+
+			//-------------------------------------------------------改动部分----计算ACK带回来的时延--记得要加enable_LAPS2限定------------------------------------------------------------------
+			if (m_lbSolution == LB_Solution::LB_E2ELAPS) {
+              if (m_E2ErdmaSmartFlowRouting->enable_laps_plus == true) {
+
+				Ipv4SmartFlowPathTag pathTag;
+				bool IsHavePathTag = p->PeekPacketTag(pathTag);
+				NS_ASSERT_MSG(IsHavePathTag, "Path tag should be attached on ACK packet");
+				//计算计算ACK带回来的时延
+				int64_t ack_caculated_delay = Simulator::Now().GetNanoSeconds() - pathTag.GetTimeStamp().GetNanoSeconds();
+				NS_ASSERT_MSG(ack_caculated_delay >= 0, "Timestamp should be non-negative");
+				//导出看看数据包/探测包走到终点的时延
+				AckPathTag acktag;
+				bool IsHaveACKPathTag = p->PeekPacketTag(acktag);
+				NS_ASSERT_MSG(IsHaveACKPathTag, "Path tag should be attached on ACK packet");
+
+				//看看是否为数据包ACK
+				/*Ipv4SmartFlowProbeTag probeTag;
+				bool findProPacket = p->PeekPacketTag(probeTag);
+				if (findProPacket) {
+					std::cout << std::endl << "探测包 ";
+					std::cout << "ACK到达终点." << "   数据包到达终点所用时间:" << acktag.GetDelay() << "    ACK带回来的估计时延（还没计算本地出端口长度）：" << ack_caculated_delay << std::endl;
+
+				}
+				else
+					std::cout << 0;*/
+
+				//这里就是替换ACK中AckPathTag的时延，之后对时延的操作就可以复用了
+				acktag.SetDelay(ack_caculated_delay);
+				p->ReplacePacketTag(acktag);
+
+			}
+
+		}
+			//-------------------------------------------------------改动部分结束---------------------------------------------------------
+
+
+
 			ReceiveAckForLaps(p, ch);
 		}
 		else

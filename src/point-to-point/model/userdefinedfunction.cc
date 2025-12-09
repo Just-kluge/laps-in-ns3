@@ -2816,6 +2816,11 @@ namespace ns3
 
     config_switch_mmu(varMap);
 
+    if（varMap->lasName=="e2elaps"）{
+      RdmaSmartFlowRouting::enable_laps_plus=varMap->enable_laps_plus;
+      
+    }
+
     set_switch_cc_para(varMap);
     config_switch_lb(varMap);
     return;

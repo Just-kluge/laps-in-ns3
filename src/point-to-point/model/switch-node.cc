@@ -1330,8 +1330,106 @@ namespace ns3
 			return; // Drop
 	}
 
+
+
+
+//为ACK找到其对应数据包/探测包的当前交换机出端口
+uint32_t SwitchNode::GetDataPktEgressPortForACK(uint32_t dataPktPathId) {
+
+	PathData* pitEntry = m_mmu->m_SmartFlowRouting->lookup_PIT(dataPktPathId);
+	for (uint32_t i = 0; i < pitEntry->nodeIdSequence.size(); i++) {
+		if (pitEntry->nodeIdSequence[i] == GetSwitchId()) {
+			NS_ASSERT_MSG(pitEntry != 0 && i < pitEntry->portSequence.size(), "The hopIdx i is larger than the pathSize");
+			//std::cout << "找到出端口" << "   ";
+			return pitEntry->portSequence[i];
+		}
+	}
+	//std::cout << "未找到出端口" << "   ";
+	NS_ASSERT_MSG(false, "未找到出端口");
+	return  0;
+}
+
+
+
+
+
+
 	void SwitchNode::DoSwitchSend(Ptr<Packet> p, CustomHeader &ch, uint32_t outDev, uint32_t qIndex)
 	{
+
+
+
+	//------------------------------------------------开始编写读取队列长度的算法---------------------------------------
+	//启动laps,启动laps优化算法，数据包是NACK
+		if (m_lbSolution == LB_Solution::LB_E2ELAPS) {
+			if (m_mmu->m_SmartFlowRouting->enable_laps_plus == true && ch.l3Prot == 0xFD) {
+				//因为ACK中的标签就是之前数据包的标签，所以可以用算法提取出之前数据包的出端口，但是还要确认一下它是如何更新下一条的，万一再这一步的时候已经更新到下一跳的标签那直接寄，好的确实更新了
+				AckPathTag acktag;
+				p->PeekPacketTag(acktag);
+				/*Ipv4SmartFlowPathTag pathTag;
+				p->PeekPacketTag(pathTag);
+				Ipv4SmartFlowPathTag nowhop_pathTag= pathTag;
+				uint32_t curHopIdx = nowhop_pathTag.get_the_current_hop_index();
+				nowhop_pathTag.set_hop_idx(curHopIdx-1);
+
+				uint32_t pathId = nowhop_pathTag.get_path_id();
+				uint32_t hopIdx = nowhop_pathTag.get_the_current_hop_index();
+
+
+				std::cout << "ACKAckPathTag 路径ID：" << acktag.GetPathId();
+				PathData* pitEntry = m_mmu->m_SmartFlowRouting->lookup_PIT(acktag.GetPathId());
+
+
+				std::cout << "ACK所处当前交换机节点:" << GetSwitchId() ;
+				std::cout << "标签里面的交换机顺序：";
+				for (int i = 0; i < pitEntry->nodeIdSequence.size(); i++) {
+						std::cout << pitEntry->nodeIdSequence[i] << ";";
+				}
+				std::cout << "标签里面的端口顺序：";
+				for (int i = 0; i < pitEntry->portSequence.size(); i++) {
+					std::cout << pitEntry->portSequence[i] << ";";
+				}*/
+				uint32_t dataPktselectedPortId = GetDataPktEgressPortForACK(acktag.GetPathId());
+				//std::cout << "  数据包出端口：" << dataPktselectedPortId;
+
+
+				//---------这里有几个可以改动的地方， i = 0; i < 8，这里应该宏定义一下，数据包大小设置成1024，是否合理还有待商榷-----------
+				//计算出端口比特总量
+				uint32_t sum_pkt = 0;
+				for (uint32_t i = 0; i < 8; i++) {
+					sum_pkt += m_mmu->egress_bytes[dataPktselectedPortId][i];
+				}
+
+				//加上一个正常数据包大小此时才能够当成真正的排队时延，不过数据包大小设置成1024，是否合理还有待商榷。
+				sum_pkt += (1024 - p->GetSize());
+				//std::cout << "  数据比特总量：" << sum_pkt << std::endl << std::endl << std::endl;
+				//得到出端口的链路速率
+				uint64_t current_port_rate = m_outPort2BitRateMap[dataPktselectedPortId];
+				uint64_t total_bits = sum_pkt * 8;
+				//  计算时延（纳秒）
+				uint64_t queuing_delay_ns = (current_port_rate > 0)
+					? (total_bits * 1000000000ULL) / current_port_rate
+					: 0; // 防止除零
+
+				//然后就是把排队时延作用到ACK的时间戳了
+				Ipv4SmartFlowPathTag pathTag;
+				p->PeekPacketTag(pathTag);
+				//     更新时间戳
+				Time t = pathTag.GetTimeStamp() - NanoSeconds(queuing_delay_ns);;
+				pathTag.SetTimeStamp(t);
+				p->ReplacePacketTag(pathTag);
+				//Ipv4SmartFlowPathTag pathTag2;
+				//p->PeekPacketTag(pathTag2);
+
+
+				//std::cout << "后时间戳：" << pathTag.GetTimeStamp() << "包头大小：" << p->GetSize() << "总比特量：" << total_bits << " 速率: " << current_port_rate << "  时延：" << queuing_delay_ns << std::endl << std::endl << std::endl;
+			}
+		}
+		//------------------------------------------------完成编写读取队列长度，计算时延并更新到ACK时间戳的算法---------------------------------------
+
+
+
+		
 		int idx = outDev;
 
 		if (idx >= 0)

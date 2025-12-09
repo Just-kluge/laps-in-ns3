@@ -208,6 +208,10 @@ namespace ns3
     void ClearTable();
     bool SwitchReceiveFromDevice(Ptr<NetDevice> device, Ptr<Packet> packet, CustomHeader &ch);
     void DoSwitchSend(Ptr<Packet> p, CustomHeader &ch, uint32_t outDev, uint32_t qIndex);
+
+    //-------------------------------------------------------------------新增函数-----------------------------------------------------
+    uint32_t GetDataPktEgressPortForACK(uint32_t dataPktPathId);
+    
     void SendToDevContinue(Ptr<Packet> p, CustomHeader &ch);
     void SwitchNotifyDequeue(uint32_t ifIndex, uint32_t qIndex, Ptr<Packet> p);
     void SetFlowletTimeout(Time timeout);

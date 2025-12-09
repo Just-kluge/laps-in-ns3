@@ -94,8 +94,10 @@ namespace ns3
     RdmaSmartFlowRouting();
     virtual ~RdmaSmartFlowRouting();
 
+    //-------------------------------------------------------------------启动laps_plus-----------------------------------------------------
+    static bool enable_laps_plus;
 
-  
+
     static std::vector<probeInfoEntry> m_prbInfoTable;
     static std::map<std::string, reorder_entry_t> m_reorderTable;
     static double laps_alpha;

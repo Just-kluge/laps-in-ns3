@@ -777,6 +777,11 @@ namespace ns3
 
   struct global_variable_t
   {
+
+    //-----------------------------------定义laps_plus------------------------------------------------
+    bool enable_laps_plus;
+
+
     // std::map<Ptr<Node>, Ipv4Address> svNode2Addr;
     std::map<Ipv4Address, Ptr<Node>> addr2node;
     std::map<Ipv4Address, uint32_t> ip2NodeId;

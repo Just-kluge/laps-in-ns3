@@ -3302,6 +3302,12 @@ namespace ns3
 
     config_switch_mmu(varMap);
 
+
+   if(varMap->lbsName=="e2elaps"){
+    RdmaSmartFlowRouting::enable_laps_plus=varMap->enable_laps_plus;
+   }
+
+
     set_switch_cc_para(varMap);
     config_switch_lb(varMap);
     return;
@@ -4458,6 +4464,9 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
       std::vector<std::string> values(e.begin() + 1, e.end()); // 其余元素字符作为value
       varMap->configMap[key] = values;
     }
+    //-----------------------------------初始化laps_plus------------------------------------------------
+    
+    varMap->enable_laps_plus=false;
     varMap->irnMode = varMap->configMap.find("irnMode") != varMap->configMap.end() ? varMap->configMap["irnMode"][0] : "NONE";
     varMap->enbaleRateTrace = varMap->configMap.find("enbaleRateTrace") != varMap->configMap.end() ? stringToBool(varMap->configMap["enbaleRateTrace"][0]) : false;
     varMap->enableProbeTrace = varMap->configMap.find("enableProbeTrace") != varMap->configMap.end() ? stringToBool(varMap->configMap["enableProbeTrace"][0]) : false;

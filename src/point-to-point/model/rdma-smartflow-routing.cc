@@ -26,6 +26,9 @@
 namespace ns3
 {
 
+//--------------------------------初始化laps_plus_________________________________--------------------------------------------------
+    bool RdmaSmartFlowRouting::enable_laps_plus = false;
+
     // 在类外部初始化静态成员变量
     std::vector<probeInfoEntry> RdmaSmartFlowRouting::m_prbInfoTable(0);
     std::map<std::string, reorder_entry_t> RdmaSmartFlowRouting::m_reorderTable;
