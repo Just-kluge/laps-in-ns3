@@ -141,8 +141,8 @@ namespace ns3
         }
       }
     }
-    std::cout << ":hostIp2IdMap: " << map_to_string<Ipv4Address, uint32_t>(routeSettings::hostIp2IdMap) << std::endl;
-    std::cout << ":hostIp2SwitchId: " << map_to_string<Ipv4Address, uint32_t>(routeSettings::hostIp2SwitchId) << std::endl;
+    //std::cout << ":hostIp2IdMap: " << map_to_string<Ipv4Address, uint32_t>(routeSettings::hostIp2IdMap) << std::endl;
+   // std::cout << ":hostIp2SwitchId: " << map_to_string<Ipv4Address, uint32_t>(routeSettings::hostIp2SwitchId) << std::endl;
     return;
   }
   void record_save_addr_on_single_node(Ptr<Node> node, std::map<Ipv4Address, Ptr<Node>> &addr2node, std::map<uint32_t, est_entry_t> &paraMap)

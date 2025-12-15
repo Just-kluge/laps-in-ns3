@@ -96,7 +96,7 @@ namespace ns3
 
     //-------------------------------------------------------------------启动laps_plus-----------------------------------------------------
     static bool enable_laps_plus;
-
+    static u_int32_t choose_softmax;
 
     static std::vector<probeInfoEntry> m_prbInfoTable;
     static std::map<std::string, reorder_entry_t> m_reorderTable;

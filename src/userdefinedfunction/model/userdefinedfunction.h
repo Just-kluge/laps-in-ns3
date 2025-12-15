@@ -780,7 +780,7 @@ namespace ns3
 
     //-----------------------------------定义laps_plus------------------------------------------------
     bool enable_laps_plus;
-
+   uint32_t choose_softmax;
 
     // std::map<Ptr<Node>, Ipv4Address> svNode2Addr;
     std::map<Ipv4Address, Ptr<Node>> addr2node;

@@ -28,7 +28,7 @@ namespace ns3
 
 //--------------------------------初始化laps_plus_________________________________--------------------------------------------------
     bool RdmaSmartFlowRouting::enable_laps_plus = false;
-
+    uint32_t RdmaSmartFlowRouting::choose_softmax=0;
     // 在类外部初始化静态成员变量
     std::vector<probeInfoEntry> RdmaSmartFlowRouting::m_prbInfoTable(0);
     std::map<std::string, reorder_entry_t> RdmaSmartFlowRouting::m_reorderTable;
@@ -1773,33 +1773,49 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
     std::vector<double> weights(paths.size());
     double sum_weights = 0.0;
     // bool is9604 = false;
+
     Time t = Simulator::Now();
+
+    double total_delay = 0.0; 
+    for (size_t j = 0; j < paths.size(); ++j) {
+               total_delay += static_cast<double>(paths[j]->latency);
+           }
+
+           
     for (size_t i = 0; i < weights.size(); i++)
     {
-        // if (paths[i]->nextAvailableTime < t)
-        // {
-        //     // paths[i]->latency = paths[i]->theoreticalSmallestLatencyInNs;
-        //     // paths[i]->nextAvailableTime = t + paths[i]->theoreticalSmallestLatency;
-        //     weights[i] = 0.0;
-        // }
-        
-        // if (paths[i]->latency > paths[i]->theoreticalSmallestLatencyInNs)
-        // {
-        //     weights[i] = 0.0;
-        // }
-        // else
-        // {
-        //     double ratio = -1.0 * paths[i]->latency/maxBastDelay  * laps_alpha;
-        //     weights[i] = std::exp(ratio);
-        //     sum_weights += weights[i];
-        // }
-        double ratio = -1.0 * paths[i]->latency/maxBastDelay  * laps_alpha;
+
+       if(choose_softmax==0){
+
+         double ratio = -1.0 * paths[i]->latency/maxBastDelay  * laps_alpha;
         weights[i] = std::exp(ratio);
         sum_weights += weights[i];
-        // if (paths[i]->pid == 9604)
-        // {
-        //     is9604 = true;
-        // }
+       //std::cout<<"choose_softmax==0"<<std::endl;
+
+       }else if(choose_softmax==1){     
+        // >>> 新增逻辑开始 <<<
+           double ratio = -1.0 * paths[i]->latency/maxBastDelay  * 40.0;
+        weights[i] = std::exp(ratio);
+        sum_weights += weights[i];
+        
+           // >>> 新增逻辑结束 <<<
+
+       }else if(choose_softmax==2){
+        double ratio = -1.0 * paths[i]->latency/maxBastDelay  *30.0;
+        weights[i] = std::exp(ratio);
+        sum_weights += weights[i];
+        
+       }else if(choose_softmax==3){
+
+            double ratio = -1.0 * paths[i]->latency/maxBastDelay  * 50.0;
+        weights[i] = std::exp(ratio);
+        sum_weights += weights[i];
+       }else if(choose_softmax==4){
+
+            double ratio = -1.0 * paths[i]->latency/maxBastDelay  * 60.0;
+        weights[i] = std::exp(ratio);
+        sum_weights += weights[i];
+       }
         
     }
     NS_ASSERT_MSG(sum_weights >= 0.0, "The sum_weights is zero");
@@ -1816,17 +1832,6 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
                     "Mininal Delay: " << paths[i]->theoreticalSmallestLatencyInNs << ", " <<
                     "Weight: " << weights[i]
                    );
-        // std::cout << "Path: " << paths[i]->pid << ", " << "Now: " << t.GetNanoSeconds() << ", " << "Realtime Delay: " << paths[i]->latency << ", " << "Mininal Delay: " << paths[i]->theoreticalSmallestLatencyInNs << ", " << "nextAvailableTime: " << paths[i]->nextAvailableTime.GetNanoSeconds() << ", " << "Weight: " << weights[i] << std::endl;
-
-        // if (is9604)
-        // {
-        //     std::cout << "Path: " << paths[i]->pid << ", " <<
-        //                 "Realtime Delay: " << paths[i]->latency << ", " <<
-        //                 "Mininal Delay: " << paths[i]->theoreticalSmallestLatencyInNs << ", " <<
-        //                 "Now: " << t.GetNanoSeconds() << ", " <<
-        //                 "nextAvailableTime: " << paths[i]->nextAvailableTime.GetNanoSeconds() << ", " <<
-        //                 "Weight: " << weights[i] << std::endl;
-        // }
 
     }
 
