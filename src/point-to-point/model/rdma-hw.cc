@@ -1542,6 +1542,11 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 		m_lossPacket[m_node->GetId()][flowId][now.GetMicroSeconds()] = m_saveRecordEntry;
 		NS_LOG_INFO("RTO " << rto.GetMicroSeconds() << " FLOW " << flowId << " snd_nxt " << qp->snd_nxt << " <-snd_una " << qp->snd_una);
 	}
+
+		
+
+
+
 	RecoverQueue(qp);
 	dev->TriggerTransmit();
 }
@@ -1794,6 +1799,7 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 				// 	std::cout<<"itseq:"<<it2->seq<<" itsize:"<<it2->size<<std::endl;
 				// }
 				qp->m_irn.m_sack.m_lossy_data.emplace_back(it2->seq, it2->size);
+                
 				// if(qp->m_flow_id==3816){
 				// 	std::cout<<"1111seq:"<<qp->m_irn.m_sack.m_lossy_data.back().first<<" 11111itsize:"<<qp->m_irn.m_sack.m_lossy_data.back().second<<std::endl;
 				// }
@@ -2624,7 +2630,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 	{
 		NS_ASSERT_MSG(Irn::mode == Irn::Mode::NACK, "LAPS::NACK should be enabled");
 		// Time timeInNs = GetRtoTimeForPath(pid) * 200;
-		Time timeInNs = MilliSeconds(8);
+		Time timeInNs = MilliSeconds(12);
 		auto it = m_rtoEventsPerPath.find(pid);
 		if (it != m_rtoEventsPerPath.end())
 		{
@@ -2735,6 +2741,9 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 				// std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Time " << Simulator::Now().GetNanoSeconds() << ", Path " << pid << " enter RTO timeout" << std::endl;
 				prefixPrinted = true;
 			}
+
+
+
 			//std::cout << "FlowID " << flowId <<", PathID=" << pid << ", segment=[" << seq << ", " << seq+size << "]" << std::endl;
 			it2 = it->second.erase(it2);
 		}

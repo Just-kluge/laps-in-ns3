@@ -539,6 +539,13 @@ namespace ns3
     // }
     RdmaHw::m_recordQpExec[flowId].finishTime = Simulator::Now().GetNanoSeconds();
 
+//------------------------------------------------新增-----------------------------------------------------------------------
+    if(m->lbsName=="e2elaps")
+   RdmaHw::m_recordQpExec[flowId].lastQpSendRate=q->laps.m_curRate.GetBitRate();
+     else
+     RdmaHw::m_recordQpExec[flowId].lastQpSendRate=q->m_rate.GetBitRate();
+
+
     fprintf(os, "SIP:%08x DIP:%08x SP:%u DP:%u DataSizeInByte:%lu PktSizeInByte:%u SendPktSizeInByte:%lu StartTimeInNs:%lu LastTimeInNs:%lu EndTimeInNs:%lu BaseFctInNs:%ld\n",
             q->sip.Get(),
             q->dip.Get(),
@@ -1547,9 +1554,9 @@ namespace ns3
     {
 
       uint32_t pitsize = sw->m_mmu->m_SmartFlowRouting->install_PIT(PIT[nodeId]);
-      //std::cout << "nodeId " << nodeId << " finished install_PIT_from_swnode" << nodeId << " size " << pitsize << std::endl;
+     // std::cout << "nodeId " << nodeId << " finished install_PIT_from_swnode" << nodeId << " size " << pitsize << std::endl;
       uint32_t pstsize = sw->m_mmu->m_SmartFlowRouting->install_PST(PST[nodeId]);
-    //  std::cout << "nodeId " << nodeId << " finished install_PST_from_swnode" << nodeId << " size " << pstsize << std::endl;
+     // std::cout << "nodeId " << nodeId << " finished install_PST_from_swnode" << nodeId << " size " << pstsize << std::endl;
     }
     else if (varMap->lbsName == "conweave")
     {
@@ -3104,9 +3111,9 @@ namespace ns3
         //   rateInGbps /= 2;
         // }
        // std::cout << "Port " << nicIdx << " has rate " << rateInGbps << " Gbps, delay " << delayInNs/1000;
-        //std::cout << " Us, headroom " << swNode->m_mmu->headroom[nicIdx]/1000 << " KB ";
-       // std::cout << "and reserve " << swNode->m_mmu->reserve/1000 << " KB ";
-       // std::cout << "alpha " << swNode->m_mmu->pfc_a_shift[nicIdx] << std::endl;
+       // std::cout << " Us, headroom " << swNode->m_mmu->headroom[nicIdx]/1000 << " KB ";
+        //std::cout << "and reserve " << swNode->m_mmu->reserve/1000 << " KB ";
+        //std::cout << "alpha " << swNode->m_mmu->pfc_a_shift[nicIdx] << std::endl;
         if ((nodeIdx == 0) && (nicIdx == 1)) {
           update_EST(varMap->paraMap, "EcnParameters", varMap->ecnParaMap[rateInGbps].toStrinng());
           NS_LOG_INFO("EcnParameters : " << varMap->ecnParaMap[rateInGbps].toStrinng());
@@ -3118,9 +3125,9 @@ namespace ns3
       // swNode->m_mmu->ConfigBufferSize(varMap->mmuSwBufferSizeInMB * 1024 * 1024);
       //  swNode->m_mmu->ConfigBufferSize(varMap->mmuSwBufferSizeInMB * 1024 * 1024);
       swNode->m_mmu->ConfigNPort(swNode->GetNDevices() - 1);
-     // std::cout << "Switch " << swNode->m_mmu->node_id << " MMU is " << 1.0*swNode->m_mmu->buffer_size/1000 << " KB ";
+      //std::cout << "Switch " << swNode->m_mmu->node_id << " MMU is " << 1.0*swNode->m_mmu->buffer_size/1000 << " KB ";
      // std::cout << "Headroom is " << 1.0*swNode->m_mmu->total_hdrm/1000 << " KB ";
-    //  std::cout << "Reserved is " << 1.0*swNode->m_mmu->total_rsrv/1000 << " KB ";
+     // std::cout << "Reserved is " << 1.0*swNode->m_mmu->total_rsrv/1000 << " KB ";
      // std::cout << "PFC Threshold is " << 1.0*swNode->m_mmu->shared_bytes/1000 << std::endl;
 
       if (nodeIdx == 0) {
@@ -3305,7 +3312,7 @@ namespace ns3
 
    if(varMap->lbsName=="e2elaps"){
     RdmaSmartFlowRouting::enable_laps_plus=varMap->enable_laps_plus;
-     RdmaSmartFlowRouting::choose_softmax=varMap->choose_softmax;
+         RdmaSmartFlowRouting::choose_softmax=varMap->choose_softmax;
    }
 
 

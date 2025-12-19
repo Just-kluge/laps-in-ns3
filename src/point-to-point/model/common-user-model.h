@@ -475,6 +475,7 @@ namespace ns3
         uint32_t bytesLeft = 0;
         uint32_t bytesLost = 0;
         uint32_t bytesFly = 0;
+        uint64_t lastQpSendRate =0;
 
         static std::string get_title()
         {
@@ -533,7 +534,10 @@ namespace ns3
             str += "bytesLost=" + std::to_string(bytesLost) + ", ";
             str += "bytesFly=" + std::to_string(bytesFly) + ", ";
             str += "windowSize=" + std::to_string(windowSize) + ", ";
-            str += "maxNxtSeq=" + std::to_string(maxNxtSeq);
+            str += "maxNxtSeq=" + std::to_string(maxNxtSeq)+ ", ";
+            str += "retransmissionCount=" + std::to_string(sendPacketNum-recePacketNum) + ", "; // 添加重传计数
+            str +="FCT=" + std::to_string(finishTime-installTime) + ", "; 
+            str +="lastQpSendRate=" + std::to_string(lastQpSendRate) + ", "; 
             return str;
         }
     };
