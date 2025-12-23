@@ -682,7 +682,15 @@ namespace ns3
 				  {
 					  return lhs->theoreticalSmallestLatencyInNs > rhs->theoreticalSmallestLatencyInNs; // 降序排列
 				  });
-		qp->laps.m_tgtDelayInNs = pitEntries[0]->theoreticalSmallestLatencyInNs;
+
+
+
+	 //=================================================================*0.85看看·========================
+		qp->laps.m_tgtDelayInNs = pitEntries[0]->theoreticalSmallestLatencyInNs*0.85;
+
+
+
+
 		qp->SetBaseRtt(qp->laps.m_tgtDelayInNs * 2);
 
 		uint64_t winInByte = uint64_t(1.0 * qp->laps.m_tgtDelayInNs * 2 * m_bps.GetBitRate() / 8 / 1000000000lu);
@@ -2630,7 +2638,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 	{
 		NS_ASSERT_MSG(Irn::mode == Irn::Mode::NACK, "LAPS::NACK should be enabled");
 		// Time timeInNs = GetRtoTimeForPath(pid) * 200;
-		Time timeInNs = MilliSeconds(12);
+		Time timeInNs = MilliSeconds(8);
 		auto it = m_rtoEventsPerPath.find(pid);
 		if (it != m_rtoEventsPerPath.end())
 		{

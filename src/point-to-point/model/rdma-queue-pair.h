@@ -148,7 +148,7 @@ struct Irn{
 
 class RdmaQueuePair : public Object {
 public:
-	Time startTime;
+Time startTime;
 	Ipv4Address sip, dip;
 	uint16_t sport, dport;
 	uint64_t m_size;

@@ -99,7 +99,7 @@ namespace ns3
 
 
 	RdmaQueuePair::RdmaQueuePair(uint16_t pg, Ipv4Address _sip, Ipv4Address _dip, uint16_t _sport, uint16_t _dport)
-	{
+	{  
 		startTime = Simulator::Now();
 		sip = _sip;
 		dip = _dip;

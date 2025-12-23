@@ -1793,22 +1793,22 @@ if(choose_softmax==0){
 
        }else if(choose_softmax==1){     
         // >>> 新增逻辑开始 <<<
-           double ratio = -1.0 * paths[i]->latency/maxBastDelay  * 40.0;
+           double ratio = -1.0 * paths[i]->latency/maxBastDelay  * 0.5;
         weights[i] = std::exp(ratio);
         sum_weights += weights[i]; // >>> 新增逻辑结束 <<<
 
        }else if(choose_softmax==2){
-        double ratio = -1.0 * paths[i]->latency/maxBastDelay  *30.0;
+        double ratio = -1.0 * paths[i]->latency/maxBastDelay  *2;
         weights[i] = std::exp(ratio);
         sum_weights += weights[i];
   }else if(choose_softmax==3){
 
-            double ratio = -1.0 * paths[i]->latency/maxBastDelay  * 50.0;
+            double ratio = -1.0 * paths[i]->latency/maxBastDelay  * 0.5;
         weights[i] = std::exp(ratio);
         sum_weights += weights[i];
        }else if(choose_softmax==4){
 
-            double ratio = -1.0 * paths[i]->latency/maxBastDelay  * 60.0;
+            double ratio = -1.0 * paths[i]->latency/maxBastDelay  *2;
         weights[i] = std::exp(ratio);
         sum_weights += weights[i];
        }
