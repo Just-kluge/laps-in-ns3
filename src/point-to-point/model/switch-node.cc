@@ -1427,7 +1427,8 @@ uint32_t SwitchNode::GetDataPktEgressPortForACK(uint32_t dataPktPathId) {
 		}
 		//------------------------------------------------完成编写读取队列长度，计算时延并更新到ACK时间戳的算法---------------------------------------
 
-
+//if (ch.l3Prot == 0x11&&p->GetSize()!=1048) 
+//std::cout<<"数据包大小："<<p->GetSize()<<",baotou大小："<<ch.GetSerializedSize()<<std::endl;
 
 		
 		int idx = outDev;

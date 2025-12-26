@@ -90,7 +90,7 @@ namespace ns3
 		static void insertRateRecord(uint32_t flowId, uint64_t curRateInMbps);
 		static void insertPathDelayRecord(uint32_t pid, uint64_t pathDelayInNs);
 		static std::map<uint32_t, uint64_t> RecordPacketHop;
-		Ptr<Node> m_node;
+        Ptr<Node> m_node;
 		DataRate m_minRate; //< Min sending rate
 		uint32_t m_mtu;
 		CongestionControlMode m_cc_mode;
@@ -274,8 +274,10 @@ namespace ns3
 	// bool isPathAvailable(uint32_t flowId);
 	Time getNxtAvailTimeForQp(uint32_t flowId);
 
+//=================================新增函数=========================================================
 
-
+      void InitializePathBdpForAllPaths(std::vector<Ptr<Node>> allNodes1) ;
+	  void decreaseBDPForPath(uint32_t pathId,uint16_t size);
 
 	};
 

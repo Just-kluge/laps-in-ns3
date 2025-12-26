@@ -242,6 +242,19 @@ namespace ns3
     PathData * CheckProbePathAmoungPitEntries(std::vector<PathData *> & pitEntries);
 
 
+    
+//===========================================================新增部分====================================
+		// BDP数据结构和管理
+		struct PathBdpInfo {
+			uint64_t currentBdp;  // 当前BDP占用
+			uint64_t maxBdp;      // 最大BDP容量
+			PathBdpInfo() : currentBdp(0), maxBdp(0) {}
+		};
+		// 路径BDP管理相关
+		std::map<uint32_t, PathBdpInfo> m_pathBdpMap; // PID到BDP信息的映射
+ bool IsBDPAllFull(Ipv4Address srcServerAddr,Ipv4Address dstServerAddr);
+//===========================================================新增部分====================================
+
   private:
     // callback
     SwitchSendCallback m_switchSendCallback;           // bound to SwitchNode::SwitchSend (for Request/UDP)

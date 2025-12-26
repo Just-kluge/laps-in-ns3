@@ -1143,7 +1143,18 @@ namespace ns3 {
 			UpdateNxtDequeueAndTransmitTimeOnSrcHostForLaps();
 		}
 		else
-		{
+         {//如果是数据包，BDP满了就不发,限定lapsPLUS
+			if (RdmaSmartFlowRouting::enable_laps_plus&&qpFlowIndex !=int(QINDEX_OF_ACK_PACKET_IN_SERVER)){
+				Ptr<RdmaSmartFlowRouting> m_routing = m_rdmaGetE2ELapsLBouting();
+				Ptr<RdmaQueuePair> qp = m_rdmaEQ->GetQp(qpFlowIndex);
+				Ipv4Address srcServerAddr = Ipv4Address(qp->sip);
+                 Ipv4Address dstServerAddr = Ipv4Address(qp->dip);
+				if(m_routing->IsBDPAllFull(srcServerAddr, dstServerAddr))
+				return;
+                
+		}
+
+
 			Ptr<E2ESrcOutPackets> outEntry = GetTransmitQpContentOnSrcHostForLaps(qpFlowIndex);
 			AddPathTagOnSrcHostForLaps(outEntry);
 			// if (outEntry->isData)

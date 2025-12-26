@@ -2932,6 +2932,7 @@ namespace ns3
     add_QBB_channels(varMap);
     set_QBB_trace(varMap);
     install_rdma_driver(varMap);
+
     return;
   }
 
@@ -3318,6 +3319,33 @@ namespace ns3
 
     set_switch_cc_para(varMap);
     config_switch_lb(varMap);
+
+
+  NodeContainer &svNodes = varMap->svNodes;
+    uint32_t svNum = svNodes.GetN();
+ // 如果启用laps_plus，在所有服务器节点安装完PIT/PST后，对所有服务器节点初始化路径BDP
+    if (varMap->enable_laps_plus&&varMap->lbsName=="e2elaps")
+    {
+      std::vector<Ptr<Node>> allNodes1;
+      for(uint32_t svIdx = 0; svIdx < varMap->allNodes.GetN(); svIdx++)
+         allNodes1.push_back(varMap->allNodes.Get(svIdx));
+
+
+        for (uint32_t svIdx = 0; svIdx < svNum; svIdx++) {
+            Ptr<Node> svNode = svNodes.Get(svIdx);
+            Ptr<RdmaDriver> rdma_drv = svNode->GetObject<RdmaDriver>();
+            if (rdma_drv) {
+                Ptr<RdmaHw> rdmaHw = rdma_drv->m_rdma;
+                if (rdmaHw) {
+                    rdmaHw->InitializePathBdpForAllPaths(allNodes1);
+                    // rdmaHw->m_E2ErdmaSmartFlowRouting->print_PST();
+                }else
+                std::cout<<000;
+            }else
+                std::cout<<11111;
+        }
+    }
+
     return;
   }
   /*
@@ -4701,6 +4729,12 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
       Config::SetDefault("ns3::RdmaHw::E2ELb", StringValue(varMap->lbsName));
       Config::SetDefault("ns3::RdmaSmartFlowRouting::enabledE2ELb", BooleanValue(true));
       varMap->irnMode = "NACK";
+      
+
+//======================================================新增部分=====================================
+    RdmaSmartFlowRouting::enable_laps_plus=varMap->enable_laps_plus;
+         RdmaSmartFlowRouting::choose_softmax=varMap->choose_softmax;
+   
     }
     if (varMap->lbsName == "plb")
     {
