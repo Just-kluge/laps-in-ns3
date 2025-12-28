@@ -356,6 +356,9 @@ namespace ns3
 			dev->m_rdmaEQ->m_qpGrp = m_nic[i].qpGrp;
 			// setup callback
 			dev->m_rdmaReceiveCb = MakeCallback(&RdmaHw::Receive, this);
+			//===============================新增回调==========================================================
+			dev->m_updateRateForLapsBasedOnBDPCb = MakeCallback(&RdmaHw::UpdateRateForLapsBasedOnBDP, this);
+			//===============================新增回调==========================================================
 			dev->m_rdmaLinkDownCb = MakeCallback(&RdmaHw::SetLinkDown, this);
 			dev->m_rdmaPktSent = MakeCallback(&RdmaHw::PktSent, this);
 			dev->m_rdmaLbPktSent = MakeCallback(&RdmaHw::LBPktSent, this);
@@ -684,7 +687,7 @@ namespace ns3
 				  });
 
 		//=================================================================*0.85看看·========================
-		qp->laps.m_tgtDelayInNs = (pitEntries[0]->theoreticalSmallestLatencyInNs) * 0.6;
+		qp->laps.m_tgtDelayInNs = (pitEntries[0]->theoreticalSmallestLatencyInNs);
 
 		qp->SetBaseRtt(qp->laps.m_tgtDelayInNs * 2);
 
@@ -1747,8 +1750,12 @@ namespace ns3
 			HandleAckHpPint(qp, p, ch);
 		}
 		else if (m_cc_mode == CongestionControlMode::CC_LAPS)
-		{
+		{//================================================禁止原版增速================================================================
+			  if(!RdmaSmartFlowRouting::enable_laps_plus){
 			HandleAckLaps(qp, p, ch);
+			
+		  
+		  }
 		}
 
 		// ACK may advance the on-the-fly window, allowing more packets to send
@@ -1945,8 +1952,11 @@ namespace ns3
 		// 		}
 		// 		qp->m_retransmit = Simulator::Schedule(NanoSeconds(qp->m_baseRtt), &RdmaHw::HandleTimeoutForLaps, this, qp);
 		// }
-
-		HandleAckLaps(qp, p, ch);
+		//================================================禁止原版增速================================================================
+          if(!RdmaSmartFlowRouting::enable_laps_plus){
+			HandleAckLaps(qp, p, ch);
+		  }
+		
 
 		uint32_t nic_idx = GetNicIdxOfQp(qp);
 		Ptr<QbbNetDevice> dev = m_nic[nic_idx].dev;
@@ -3837,12 +3847,17 @@ namespace ns3
 					  });
 
 			// 使用最大延迟作为基准
-			uint64_t maxLatencyInNs = pitEntries[0]->theoreticalSmallestLatencyInNs;
-			double delayInSec = maxLatencyInNs; // 不延迟转换为秒
+			uint64_t delayInSec = pitEntries[0]->theoreticalSmallestLatencyInNs;
+			//uint64_t maxLatencyInNs = (pitEntries[0]->theoreticalSmallestLatencyInNs+
+			 //pitEntries[pitEntries.size()/2]->theoreticalSmallestLatencyInNs+
+			//  pitEntries[pitEntries.size()]->theoreticalSmallestLatencyInNs)/3;
 
 			// 为该PST中的所有路径初始化BDP
 			for (auto pitEntry : pitEntries)
 			{
+//=======================================看看用各自的延迟来试试============================================================
+                  // delayInSec=pitEntry->theoreticalSmallestLatencyInNs;
+
 
 				uint32_t pid = pitEntry->pid;
 				uint64_t minBandwidthBytesPerSec = 200000000000;
@@ -3883,16 +3898,16 @@ namespace ns3
 				// std::cout<<"node"<<nodeIdSequence[0]<<",pid:"<<pid<<",minBandwidthBytesPerSec:"<<minBandwidthBytesPerSec<<std::endl;
 
 				// 检查该路径是否已初始化过
-				uint64_t bdp = (uint64_t)((minBandwidthBytesPerSec / 1000000000.0) * (delayInSec + 1000 * portSequence.size())); // 乘以2作为缓冲
+				uint64_t bdp = (uint64_t)((minBandwidthBytesPerSec / 1000000000.0) * (delayInSec + 1000 * portSequence.size())*1.3); // 乘以2作为缓冲
 
 				if (pid == 28672 || pid == 28671 || pid == 28645)
-					std::cout << "node" << nodeIdSequence[0] << ",pid:" << pid << ",BDP:" << bdp << ",延迟：" << delayInSec + 1004 * portSequence.size() << std::endl;
+					std::cout << "node" << nodeIdSequence[0] << ",pid:" << pid << ",BDP:" << bdp << ",延迟：" << delayInSec + 1000 * portSequence.size() << std::endl;
 
 				if (m_E2ErdmaSmartFlowRouting->m_pathBdpMap.find(pid) == m_E2ErdmaSmartFlowRouting->m_pathBdpMap.end())
 				{
 					m_E2ErdmaSmartFlowRouting->m_pathBdpMap[pid].maxBdp = bdp;
 					m_E2ErdmaSmartFlowRouting->m_pathBdpMap[pid].currentBdp = 0; // 初始时路径BDP为0
-					NS_LOG_INFO("Initialize BDP for path " << pid << ", maxBdp: " << bdp << ", using max delay: " << maxLatencyInNs);
+					NS_LOG_INFO("Initialize BDP for path " << pid << ", maxBdp: " << bdp << ", using max delay: " << delayInSec);
 				}
 			}
 		}
@@ -3915,6 +3930,54 @@ namespace ns3
 			//std::cout << "decrease BDP for path " << pathId << ", currentBdp: " << m_E2ErdmaSmartFlowRouting->m_pathBdpMap[pathId].currentBdp << ", size: " << size << std::endl;
 		}
 		
+	}
+
+	void RdmaHw::UpdateRateForLapsBasedOnBDP(Ptr<RdmaQueuePair> qp,uint32_t increaserate){
+		NS_LOG_FUNCTION(this << "flowId" << qp->m_flow_id);
+		Ipv4Address srcServerAddr = Ipv4Address(qp->sip);
+		Ipv4Address dstServerAddr = Ipv4Address(qp->dip);
+		uint32_t srcHostId = m_E2ErdmaSmartFlowRouting->lookup_SMT(srcServerAddr)->hostId;
+		uint32_t dstHostId = m_E2ErdmaSmartFlowRouting->lookup_SMT(dstServerAddr)->hostId;
+		HostId2PathSeleKey pstKey(srcHostId, dstHostId);
+		pstEntryData *pstEntry = m_E2ErdmaSmartFlowRouting->lookup_PST(pstKey);
+		std::vector<PathData *> pitEntries = m_E2ErdmaSmartFlowRouting->batch_lookup_PIT(pstEntry->paths);
+
+		uint32_t congPathCnt = 0;
+		uint32_t curMaxDelayInNs = 0;
+		uint64_t tgtDelayInNs = qp->laps.m_tgtDelayInNs;
+		for (size_t i = 0; i < pitEntries.size(); i++)
+		{
+			if (pitEntries[i]->latency > tgtDelayInNs)
+			{
+				congPathCnt++;
+			}
+			curMaxDelayInNs = std::max(curMaxDelayInNs, pitEntries[i]->latency);
+		}
+
+		NS_ASSERT_MSG(pitEntries.size() > 0, "The pitEntries is empty");
+
+		uint64_t curTimeInNs = Simulator::Now().GetNanoSeconds();
+           //increaserate=2为减速，1为加速，0为不改变速率
+		if (increaserate==2)
+		{
+			if (qp->laps.m_nxtRateDecTimeInNs < curTimeInNs)
+			{
+				
+				NS_LOG_INFO("Decrease rate for LAPS");
+				int64_t timeGap = DecreaseRateForLaps(qp, curMaxDelayInNs * 2);
+				insertRateRecord(qp->m_flow_id, qp->laps.m_curRate.GetBitRate() / 1000000 / 8);
+				UpdateNxtQpAvailTimeForLaps(qp, timeGap);
+			}
+		}
+		else if(increaserate==1)
+		{
+			if (qp->laps.m_nxtRateIncTimeInNs < curTimeInNs)
+			{
+				int64_t timeGap = IncreaseRateForLaps(qp, tgtDelayInNs * 2);
+				UpdateNxtQpAvailTimeForLaps(qp, timeGap);
+				insertRateRecord(qp->m_flow_id, qp->laps.m_curRate.GetBitRate() / 1000000 / 8);
+			}
+		}
 	}
 
 }

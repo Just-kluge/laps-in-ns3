@@ -1149,9 +1149,14 @@ namespace ns3 {
 				Ptr<RdmaQueuePair> qp = m_rdmaEQ->GetQp(qpFlowIndex);
 				Ipv4Address srcServerAddr = Ipv4Address(qp->sip);
                  Ipv4Address dstServerAddr = Ipv4Address(qp->dip);
-				if(m_routing->IsBDPAllFull(srcServerAddr, dstServerAddr))
-				return;
-                
+				 uint32_t a=m_routing->IsBDPAllFull(srcServerAddr, dstServerAddr);
+				 //a=2为减速，1为加速，0为不改变速率
+				 m_updateRateForLapsBasedOnBDPCb(qp, a);
+				 //满了就不发
+				if(a==2){
+					return;
+				}
+
 		}
 
 

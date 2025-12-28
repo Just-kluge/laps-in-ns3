@@ -233,6 +233,11 @@ public:
   static std::map<std::string, std::string> qpSendInfo;
   static std::vector<std::vector<uint64_t>> flowPacketSenGap;
   static std::vector<uint64_t> PacketSenGap;
+   // =========================在中添加回调类型定义======================================================================
+typedef Callback<void, Ptr<RdmaQueuePair>, uint32_t> RdmaUpdateRateForLapsBasedOnBDPCb;
+RdmaUpdateRateForLapsBasedOnBDPCb m_updateRateForLapsBasedOnBDPCb;
+// =========================在中添加回调类型定义======================================================================
+
 
   typedef Callback<uint32_t, std::string> PlbTableDataCb;
   PlbTableDataCb m_plbTableDataCb;

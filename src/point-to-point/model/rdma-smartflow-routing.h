@@ -252,7 +252,7 @@ namespace ns3
 		};
 		// 路径BDP管理相关
 		std::map<uint32_t, PathBdpInfo> m_pathBdpMap; // PID到BDP信息的映射
- bool IsBDPAllFull(Ipv4Address srcServerAddr,Ipv4Address dstServerAddr);
+ uint32_t IsBDPAllFull(Ipv4Address srcServerAddr,Ipv4Address dstServerAddr);
 //===========================================================新增部分====================================
 
   private:

@@ -1773,7 +1773,7 @@ namespace ns3
         {
             total_delay += static_cast<double>(paths[j]->latency);
         }
- //===========================================================修改部分=====================================
+        //===========================================================修改部分=====================================
         for (size_t i = 0; i < weights.size(); i++)
         {
             auto maps = m_pathBdpMap.find(paths[i]->pid);
@@ -1788,13 +1788,13 @@ namespace ns3
                 multiplier = 40.0;
                 break;
             case 2:
-                multiplier = 5.0;
+                multiplier = 20.0;
                 break;
             case 3:
                 multiplier = 20.0;
                 break;
             case 4:
-                multiplier = 40.0;
+                multiplier = 20.0;
                 break;
             default:
                 // 可选：处理非法 choose_softmax 值，例如设为默认 multiplier 或跳过
@@ -1822,13 +1822,13 @@ namespace ns3
 
             sum_weights += weights[i];
         }
- //===========================================================修改部分=====================================
+        //===========================================================修改部分=====================================
         NS_ASSERT_MSG(sum_weights >= 0.0, "The sum_weights is zero");
         if (sum_weights == 0.0)
-        {//std::cout<<"ERROR sum_weights is zero"<<std::endl;
+        { // std::cout<<"ERROR sum_weights is zero"<<std::endl;
             return weights;
         }
- 
+
         for (size_t i = 0; i < weights.size(); i++)
         {
             weights[i] /= sum_weights;
@@ -1962,12 +1962,12 @@ namespace ns3
         uint32_t fPid = pitEntries[selPathIndex]->pid;
         add_path_tag_by_path_id(entry->dataPacket, fPid);
 
-//==================================增 加 B D P======================================================================
-           if (RdmaSmartFlowRouting::enable_laps_plus&&m_pathBdpMap.find(fPid) != m_pathBdpMap.end()) {
+        //==================================增 加 B D P======================================================================
+        if (RdmaSmartFlowRouting::enable_laps_plus && m_pathBdpMap.find(fPid) != m_pathBdpMap.end())
+        {
             m_pathBdpMap[fPid].currentBdp += p->GetSize();
-            //std::cout << "当前BDP: " << m_pathBdpMap[fPid].currentBdp << "MAXBDP: " << m_pathBdpMap[fPid].maxBdp <<"，数据包大小"<< p->GetSize()<< std::endl;
-           }
-          
+            // std::cout << "当前BDP: " << m_pathBdpMap[fPid].currentBdp << "MAXBDP: " << m_pathBdpMap[fPid].maxBdp <<"，数据包大小"<< p->GetSize()<< std::endl;
+        }
 
         NS_ASSERT_MSG(entry->lastQp, "The lastQp is null");
         if (!m_recordPathLantencyEvent.IsRunning() && enableRecordPathlatency)
@@ -2253,27 +2253,40 @@ namespace ns3
 
     //======================================检查是否BDPjun满了==========================
 
-    bool RdmaSmartFlowRouting::IsBDPAllFull(Ipv4Address srcServerAddr, Ipv4Address dstServerAddr)
-    {     if(!RdmaSmartFlowRouting::enable_laps_plus){
-        return false;
-    }
+    uint32_t RdmaSmartFlowRouting::IsBDPAllFull(Ipv4Address srcServerAddr, Ipv4Address dstServerAddr)
+    {
+        if (!RdmaSmartFlowRouting::enable_laps_plus)
+        {
+            return false;
+        }
         uint32_t srcHostId = lookup_SMT(srcServerAddr)->hostId;
         uint32_t dstHostId = lookup_SMT(dstServerAddr)->hostId;
         HostId2PathSeleKey pstKey(srcHostId, dstHostId);
         pstEntryData *pstEntry = lookup_PST(pstKey);
         std::vector<uint32_t> pids = pstEntry->paths;
+        uint32_t counts = 0;
         for (uint32_t i = 0; i < pids.size(); i++)
         {
             auto maps = m_pathBdpMap.find(pids[i]);
             PathBdpInfo it = maps->second;
             if (it.currentBdp < it.maxBdp)
             {
-               // std::cout << "BDP没满,允许发送    ";
-                return false;
+                counts++;
             }
         }
-         //std::cout <<"节点"<<srcHostId<<"到节点"<<dstHostId<< "的BDP全部满,不允许发送    "<<std::endl;
-        return true;
+         //a=2为减速，1为加速，0为不改变速率
+        if (counts == 0)
+        {
+            return 2;//BDP满了减速
+        }
+        else if (counts ==pids.size())
+        {
+            return 1;//未满BDP大于一半，加速，现在是全部未满才加速
+        }
+        else
+        {
+            return 0;//满BDP超过一半，不管
+        }
     }
 
 }
