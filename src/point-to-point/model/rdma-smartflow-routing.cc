@@ -28,6 +28,7 @@ namespace ns3
 
     //--------------------------------初始化laps_plus_________________________________--------------------------------------------------
     bool RdmaSmartFlowRouting::enable_laps_plus = false;
+    std::map<uint32_t, Ptr<Node>> RdmaSmartFlowRouting::nodeIdToNodeMap;
     uint32_t RdmaSmartFlowRouting::choose_softmax = 0;
     // 在类外部初始化静态成员变量
     std::vector<probeInfoEntry> RdmaSmartFlowRouting::m_prbInfoTable(0);
@@ -1785,7 +1786,7 @@ namespace ns3
                 multiplier = laps_alpha;
                 break;
             case 1:
-                multiplier = 40.0;
+                multiplier = 20.0;
                 break;
             case 2:
                 multiplier = 20.0;
@@ -1805,15 +1806,24 @@ namespace ns3
             double ratio = -1.0 * paths[i]->latency / maxBastDelay * multiplier;
 
             if (enable_laps_plus)
-            {
-                if (it.currentBdp < it.maxBdp)
+            {//======================bdp判断代码，先注释====================
+               if (it.currentBdp < it.maxBdp)
                 {
-                    weights[i] = std::exp(ratio);
+              double c = paths[i]->m_maxCongestionPercent;
+               double penalty = 1.0;
+                // if (c >= 0) {
+                //     double x = c; // 归一化
+                //        penalty =x*x*4+1;      
+                // }
+               weights[i] = std::exp(ratio* penalty);
+             
                 }
                 else
                 {
                     weights[i] = 0;
                 }
+         
+             
             }
             else
             {
@@ -2281,11 +2291,11 @@ namespace ns3
         }
         else if (counts ==pids.size())
         {
-            return 1;//未满BDP大于一半，加速，现在是全部未满才加速
+            return 1;//现在是全部未满才加速
         }
         else
         {
-            return 0;//满BDP超过一半，不管
+            return 0;//有满BDP，减速
         }
     }
 

@@ -628,6 +628,10 @@ namespace ns3
 		// add qp
 		uint32_t nic_idx = GetNicIdxOfQp(qp);
 		m_nic[nic_idx].qpGrp->AddQp(qp);
+
+		// 获取当前QP数量（添加后）
+	    uint32_t current_qp_count = m_nic[nic_idx].qpGrp->GetN();
+
 		uint64_t key = GetQpKey(dip.Get(), sport, dport, pg);
 		NS_ASSERT_MSG(m_qpMap.find(key) == m_qpMap.end(), "Flow cannot be initialized twice");
 		if (m_qpMap.find(key) != m_qpMap.end())
@@ -647,6 +651,9 @@ namespace ns3
 		// set init variables
 		DataRate m_bps = m_nic[nic_idx].dev->GetDataRate();
 		qp->m_max_rate = m_bps;
+
+		DataRate initial_rate = DataRate(m_bps.GetBitRate() / (current_qp_count));  // 计算初始速率
+		
 		if (false)
 		{
 
@@ -655,8 +662,8 @@ namespace ns3
 		}
 		else
 		{
-			qp->laps.m_curRate = m_bps;
-			qp->laps.m_tgtRate = m_bps;
+			qp->laps.m_curRate = initial_rate;
+			qp->laps.m_tgtRate = initial_rate;
 		}
 
 		qp->laps.m_incStage = 0;
@@ -1750,12 +1757,11 @@ namespace ns3
 			HandleAckHpPint(qp, p, ch);
 		}
 		else if (m_cc_mode == CongestionControlMode::CC_LAPS)
-		{//================================================禁止原版增速================================================================
-			  if(!RdmaSmartFlowRouting::enable_laps_plus){
+		{//================================================运行原版增速================================================================
+			// if(!RdmaSmartFlowRouting::enable_laps_plus){
 			HandleAckLaps(qp, p, ch);
 			
-		  
-		  }
+		//  }
 		}
 
 		// ACK may advance the on-the-fly window, allowing more packets to send
@@ -1904,6 +1910,9 @@ namespace ns3
 			PathData *pitEntry = m_E2ErdmaSmartFlowRouting->lookup_PIT(f_pid);
 			NS_ASSERT_MSG(pitEntry != NULL, "Invalid path id");
 			pitEntry->latency = delayInNs;
+			//==================================将ACK里面的拥塞情况写入pit============================
+			pitEntry->m_maxCongestionPercent = ackTag.GetMaxCongestionPercent();
+
 			pitEntry->tsGeneration = Simulator::Now();
 			// if (pitEntry->latency <= pitEntry->theoreticalSmallestLatencyInNs)
 			// {
@@ -1952,10 +1961,10 @@ namespace ns3
 		// 		}
 		// 		qp->m_retransmit = Simulator::Schedule(NanoSeconds(qp->m_baseRtt), &RdmaHw::HandleTimeoutForLaps, this, qp);
 		// }
-		//================================================禁止原版增速================================================================
-          if(!RdmaSmartFlowRouting::enable_laps_plus){
+		//================================================运行原版增速================================================================
+         // if(!RdmaSmartFlowRouting::enable_laps_plus){
 			HandleAckLaps(qp, p, ch);
-		  }
+		 // }
 		
 
 		uint32_t nic_idx = GetNicIdxOfQp(qp);
@@ -1980,6 +1989,9 @@ namespace ns3
 		// std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Node " << m_node->GetId() << " Receive Probe ACK Packet for path " << f_pid << std::endl;
 		//  pitEntry->print();
 		pitEntry->latency = delayInNs;
+		//==================================将ACK里面的拥塞情况写入pit============================
+		pitEntry->m_maxCongestionPercent = ackTag.GetMaxCongestionPercent();
+
 		pitEntry->tsGeneration = Simulator::Now();
 		// if (pitEntry->latency <= pitEntry->theoreticalSmallestLatencyInNs)
 		// {
@@ -2038,6 +2050,8 @@ namespace ns3
 					// 这里就是替换ACK中AckPathTag的时延，之后对时延的操作就可以复用了
 					acktag.SetDelay(ack_caculated_delay);
 					p->ReplacePacketTag(acktag);
+					//if(acktag.GetMaxCongestionPercent()>0.99)
+					//std::cout << "ACK带回来了拥塞信息：pid" <<acktag.GetPathId()<< " 最大拥塞度:"  <<acktag.GetMaxCongestionPercent()<< std::endl;
 				}
 			}
 			//-------------------------------------------------------改动部分结束---------------------------------------------------------
@@ -3765,6 +3779,7 @@ namespace ns3
 		std::vector<PathData *> pitEntries = m_E2ErdmaSmartFlowRouting->batch_lookup_PIT(pstEntry->paths);
 
 		uint32_t congPathCnt = 0;
+		uint32_t CongestionPercentPathCnt = 0;
 		uint32_t curMaxDelayInNs = 0;
 		uint64_t tgtDelayInNs = qp->laps.m_tgtDelayInNs;
 		for (size_t i = 0; i < pitEntries.size(); i++)
@@ -3773,6 +3788,10 @@ namespace ns3
 			{
 				congPathCnt++;
 			}
+	//=================================================================================
+			if(RdmaSmartFlowRouting::enable_laps_plus&&pitEntries[i]->m_maxCongestionPercent> 0.8)
+			CongestionPercentPathCnt++;
+//===============================================================================
 			curMaxDelayInNs = std::max(curMaxDelayInNs, pitEntries[i]->latency);
 		}
 
@@ -3786,8 +3805,8 @@ namespace ns3
 		// 		);
 		// uint64_t curMaxDelayInNs = (*maxElement)->theoreticalSmallestLatencyInNs;
 		uint64_t curTimeInNs = Simulator::Now().GetNanoSeconds();
-
-		if (congPathCnt == pitEntries.size())
+//===================================添加拥塞判定===============================================================
+		if (congPathCnt >= pitEntries.size())
 		{
 			if (qp->laps.m_nxtRateDecTimeInNs < curTimeInNs)
 			{
@@ -3798,7 +3817,7 @@ namespace ns3
 				// }
 
 				NS_LOG_INFO("Decrease rate for LAPS");
-				int64_t timeGap = DecreaseRateForLaps(qp, curMaxDelayInNs * 2);
+				int64_t timeGap = DecreaseRateForLaps(qp, curMaxDelayInNs*2 );
 				insertRateRecord(qp->m_flow_id, qp->laps.m_curRate.GetBitRate() / 1000000 / 8);
 				UpdateNxtQpAvailTimeForLaps(qp, timeGap);
 			}
@@ -3898,7 +3917,7 @@ namespace ns3
 				// std::cout<<"node"<<nodeIdSequence[0]<<",pid:"<<pid<<",minBandwidthBytesPerSec:"<<minBandwidthBytesPerSec<<std::endl;
 
 				// 检查该路径是否已初始化过
-				uint64_t bdp = (uint64_t)((minBandwidthBytesPerSec / 1000000000.0) * (delayInSec + 1000 * portSequence.size())*1.3); // 乘以2作为缓冲
+				uint64_t bdp = (uint64_t)((minBandwidthBytesPerSec / 1000000000.0) * (delayInSec + 1000 * portSequence.size())); // 乘以2作为缓冲
 
 				if (pid == 28672 || pid == 28671 || pid == 28645)
 					std::cout << "node" << nodeIdSequence[0] << ",pid:" << pid << ",BDP:" << bdp << ",延迟：" << delayInSec + 1000 * portSequence.size() << std::endl;
@@ -3957,8 +3976,8 @@ namespace ns3
 		NS_ASSERT_MSG(pitEntries.size() > 0, "The pitEntries is empty");
 
 		uint64_t curTimeInNs = Simulator::Now().GetNanoSeconds();
-           //increaserate=2为减速，1为加速，0为不改变速率
-		if (increaserate==2)
+           //increaserate=2为减速，1为加速，0为减速率
+		if (increaserate==2||increaserate==0)
 		{
 			if (qp->laps.m_nxtRateDecTimeInNs < curTimeInNs)
 			{

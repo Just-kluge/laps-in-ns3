@@ -23,7 +23,7 @@ namespace ns3 {
 	// bool SwitchMmu::isDynamicPfcThreshold = false;
 
 	SwitchMmu::SwitchMmu(void){
-		buffer_size = 12 * 1024 * 1024;
+		buffer_size = 32 * 1024 * 1024;
 		reserve = 4 * 1024;
 		resume_offset = 3 * 1024;
 
@@ -78,6 +78,7 @@ namespace ns3 {
 
 			// NS_LOG_INFO("(" << hdrm_bytes[i][3] << "," << ingress_bytes[i][3] << ")");
 			//}
+			//std::cout << "缓存满了，丢弃" << std::endl;
 			return false;
 		}
 		return true;

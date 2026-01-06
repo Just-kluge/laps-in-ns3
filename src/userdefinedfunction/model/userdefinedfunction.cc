@@ -3314,6 +3314,14 @@ namespace ns3
    if(varMap->lbsName=="e2elaps"){
     RdmaSmartFlowRouting::enable_laps_plus=varMap->enable_laps_plus;
          RdmaSmartFlowRouting::choose_softmax=varMap->choose_softmax;
+         
+
+   }
+   RdmaSmartFlowRouting::nodeIdToNodeMap.clear();
+   for (uint32_t i = 0; i < varMap->allNodes.GetN(); i++)
+   {
+     Ptr<Node> node = varMap->allNodes.Get(i);
+     RdmaSmartFlowRouting::nodeIdToNodeMap[node->GetId()] = node;
    }
 
 

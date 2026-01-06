@@ -32,6 +32,21 @@ namespace ns3
     AckPathTag::AckPathTag()
     {
         NS_LOG_FUNCTION(this);
+        //============================初始化拥塞为0===========================
+        m_maxCongestionPercent = 0;
+    }
+
+// 添加设置拥塞百分比的方法
+    void AckPathTag::SetMaxCongestionPercent(double percent)
+    {
+        m_maxCongestionPercent = percent;
+        return;
+    }
+     
+    // 添加获取拥塞百分比的方法
+    double AckPathTag::GetMaxCongestionPercent(void) const
+    {
+        return m_maxCongestionPercent;
     }
 
     AckPathTag::~AckPathTag()
@@ -87,7 +102,7 @@ namespace ns3
     uint32_t AckPathTag::GetSerializedSize(void) const
     {
         NS_LOG_FUNCTION(this);
-        return sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t);
+         return sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) + sizeof(double);
     }
 
     void AckPathTag::Serialize(TagBuffer i) const
@@ -96,6 +111,7 @@ namespace ns3
         i.WriteU32(m_pathId);
         i.WriteU32(m_flowId);
         i.WriteU64(m_delayInNs);
+        i.WriteDouble(m_maxCongestionPercent);
         return;
     }
 
@@ -105,6 +121,7 @@ namespace ns3
         m_pathId = i.ReadU32();
         m_flowId = i.ReadU32();
         m_delayInNs = i.ReadU64();
+        m_maxCongestionPercent = i.ReadDouble();  // <-- 新增
         return;
     }
 
@@ -114,6 +131,7 @@ namespace ns3
         os << "pathid: " << m_pathId;
         os << ", flowId: " << m_flowId;
         os << ", delay: " << m_delayInNs;
+         os << ", maxCongestion%: " << m_maxCongestionPercent;  // <-- 新增
         os << "\n";
         return;
     }

@@ -1150,8 +1150,10 @@ namespace ns3 {
 				Ipv4Address srcServerAddr = Ipv4Address(qp->sip);
                  Ipv4Address dstServerAddr = Ipv4Address(qp->dip);
 				 uint32_t a=m_routing->IsBDPAllFull(srcServerAddr, dstServerAddr);
-				 //a=2为减速，1为加速，0为不改变速率
-				 m_updateRateForLapsBasedOnBDPCb(qp, a);
+				 //a=2为减速，1为加速，0为减速  
+                  //先禁用bdp降速
+				// m_updateRateForLapsBasedOnBDPCb(qp, a);
+
 				 //满了就不发
 				if(a==2){
 					return;

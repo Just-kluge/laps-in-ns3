@@ -14,7 +14,8 @@
 #include <cmath>
 #include "ns3/ipv4-smartflow-tag.h"
 #include "assert.h"
-
+#include "ns3/flow-id-num-tag.h"
+#include <ns3/rdma-driver.h>
 namespace ns3
 {
 
@@ -1357,6 +1358,47 @@ uint32_t SwitchNode::GetDataPktEgressPortForACK(uint32_t dataPktPathId) {
 	void SwitchNode::DoSwitchSend(Ptr<Packet> p, CustomHeader &ch, uint32_t outDev, uint32_t qIndex)
 	{
 
+      /*Ipv4SmartFlowPathTag pathTag11;
+				p->PeekPacketTag(pathTag11);
+
+   // 定义要跟踪的数据包特征
+		static const uint32_t TARGET_SIP = 184580609; // 数据包SIP
+		static const uint32_t TARGET_DIP = 184574465; // 数据包DIP
+		static const uint16_t TARGET_SPORT = 6553; // 数据包Sport
+		static const uint16_t TARGET_DPORT = 6553; // 数据包Dport
+		static const uint32_t TARGET_SEQ = 14000;   // 数据包Seq
+		static const uint32_t TARGET_FLOW_ID = 5553; // flow ID
+		static  uint32_t TARGET_PATH_ID = 0;
+				bool isTargetPacket = false;
+			if (ch.l3Prot == 0x11) { // UDP data packet
+			isTargetPacket = (ch.sip == TARGET_SIP) &&
+			                (ch.dip == TARGET_DIP) &&
+			                (ch.udp.sport == TARGET_SPORT) &&
+			                (ch.udp.dport == TARGET_DPORT) &&
+			                (ch.udp.seq == TARGET_SEQ);
+		}else if (ch.l3Prot == 0xFC || ch.l3Prot == 0xFD) { // ACK or NACK packet
+			// 检查ACK包是否携带对应的路径ID
+			AckPathTag ackTag;
+			if (p->PeekPacketTag(ackTag)) {
+				isTargetPacket = (ch.sip == TARGET_DIP) &&  // ACK的SIP是原数据包的DIP
+				                (ch.dip == TARGET_SIP) &&  // ACK的DIP是原数据包的SIP
+				                (ch.udp.sport == TARGET_DPORT) &&  // ACK的sport是原数据包的dport
+				                (ch.udp.dport == TARGET_SPORT)&&(ackTag.GetPathId() == TARGET_PATH_ID);    // ACK的dport是原数据包的sport
+			}
+		}
+
+	FlowIDNUMTag fit;
+	     if (isTargetPacket&&ch.l3Prot == 0x11) {
+			
+			if (p->PeekPacketTag(fit)) {
+				if (fit.GetId() != TARGET_FLOW_ID) {
+					isTargetPacket = false; // 如果FlowIdTag不匹配，则不是目标包
+				}
+			}
+		}
+		*/
+
+
 
 
 	//------------------------------------------------开始编写读取队列长度的算法---------------------------------------
@@ -1402,6 +1444,56 @@ uint32_t SwitchNode::GetDataPktEgressPortForACK(uint32_t dataPktPathId) {
 
 				//加上一个正常数据包大小此时才能够当成真正的排队时延，不过数据包大小设置成1024，是否合理还有待商榷。
 				sum_pkt += (1024 - p->GetSize());
+
+//========================================新部分，记录缓冲区拥塞情况==========================================
+                
+                // 计算当前端口的拥塞情况并设置到ACK包的m_maxCongestionPercent字段
+				// 获取当前端口的共享缓冲区使用情况
+				uint32_t packetinDev=0;
+				auto it=m_pid2inDev.find(acktag.GetPathId());
+				if (it != m_pid2inDev.end()) {
+					packetinDev = it->second;
+					
+				}
+				else{
+					std::cout << "ACK回去，却没有找到数据包经过该设备的入端口" << "   ";
+				}
+                 /* if (isTargetPacket&&ch.l3Prot == 0xFD)
+			std::cout<<"Switch " << GetId() << " TRACKING packet - Protocol: " <<"ACK包："
+				<<", SIP: " << ch.sip << ", DIP: " << ch.dip << ", Sport: " << ch.udp.sport 
+				<< ", Dport: " << ch.udp.dport << ", FlowId: " << acktag.GetFlowId() <<"数据包入端口："<<packetinDev<<"，数据包出端口"<<dataPktselectedPortId<<",udppg;"<<ch.udp.pg<<",ACKpg;"<<ch.ack.pg<<std::endl;
+		        */
+				uint32_t portId = packetinDev; // 使用selectedPortId作为当前端口
+				uint32_t sharedUsed = m_mmu->GetSharedUsed(portId, ch.udp.pg); // 获取端口上共享区使用量
+				uint32_t sharedThreshold = m_mmu->GetPfcThreshold(portId); // 获取PFC阈值，即最大共享缓冲区大小
+				
+				// 计算拥塞百分比
+				double congestionPercent = 0.0;
+				congestionPercent = (static_cast<double>(sharedUsed)) / static_cast<double>(sharedThreshold);
+			
+				
+				// 获取当前数据包中的AckPathTag
+				AckPathTag ackPathTag;
+				bool hasAckTag = p->PeekPacketTag(ackPathTag);
+				double currentMaxCongestion = 0.0;
+				if (hasAckTag) {
+					currentMaxCongestion = ackPathTag.GetMaxCongestionPercent();
+				}
+				
+				// 取当前值和计算值的最大值
+				double newMaxCongestion = std::max(currentMaxCongestion, congestionPercent);
+				
+				// 更新数据包中的AckPathTag中的m_maxCongestionPercent字段
+				if (hasAckTag) {
+					ackPathTag.SetMaxCongestionPercent(newMaxCongestion);
+					p->ReplacePacketTag(ackPathTag);
+				} else {
+					ackPathTag.SetMaxCongestionPercent(newMaxCongestion);
+					p->AddPacketTag(ackPathTag);
+				}
+
+ //========================================新部分，记录缓冲区拥塞情况==========================================
+
 				//std::cout << "  数据比特总量：" << sum_pkt << std::endl << std::endl << std::endl;
 				//得到出端口的链路速率
 				uint64_t current_port_rate = m_outPort2BitRateMap[dataPktselectedPortId];
@@ -1455,6 +1547,40 @@ uint32_t SwitchNode::GetDataPktEgressPortForACK(uint32_t dataPktPathId) {
 			FlowIdTag t;
 			p->PeekPacketTag(t);
 			uint32_t inDev = t.GetFlowId();
+
+			/* if (isTargetPacket&&ch.l3Prot == 0x11){
+				std::cout<<"Switch " << GetId() << " TRACKING packet - Protocol: " <<"包："
+				<<"pid:"<<pathTag11.get_path_id()<< ", SIP: " << ch.sip << ", DIP: " << ch.dip << ", Sport: " << ch.udp.sport 
+				<< ", Dport: " << ch.udp.dport << ", FlowId: " << TARGET_FLOW_ID <<"入端口："<<inDev<<"，出端口"<<outDev<<",pg;"<<ch.udp.pg<<std::endl;
+		
+				TARGET_PATH_ID=pathTag11.get_path_id();
+			 }*/
+			
+//==================================================新增记录当前交换机入端口=============
+              if (m_lbSolution == LB_Solution::LB_E2ELAPS){
+				if (m_mmu->m_SmartFlowRouting->enable_laps_plus == true ){
+                 Ipv4SmartFlowPathTag pathTag;
+					if(p->PeekPacketTag(pathTag))
+					{
+						uint32_t pathId =pathTag.get_path_id() ;
+						if (m_pid2inDev.find(pathId) == m_pid2inDev.end())
+					{
+						m_pid2inDev[pathId] = inDev;
+					}
+					if( m_pid2sid.find(pathId) == m_pid2sid.end()){
+						 uint32_t srcHostId = routeSettings::hostIp2IdMap[Ipv4Address(ch.sip)];
+						 Ptr<Node> srcHost = RdmaSmartFlowRouting::nodeIdToNodeMap[srcHostId];
+						 m_pid2sid[pathId] =srcHost;
+					}
+					}
+					else{
+						std::cout << "laps_plus: 交换机转发时包找不到路径ID" << std::endl;
+					}
+				}
+			  }
+//==================================================新增记录当前交换机入端口=============
+            
+
 			if (qIndex != 0)
 			{ // not highest priority
 				if (m_mmu->CheckIngressAdmission(inDev, qIndex, p->GetSize()) && m_mmu->CheckEgressAdmission(idx, qIndex, p->GetSize()))
@@ -1470,7 +1596,39 @@ uint32_t SwitchNode::GetDataPktEgressPortForACK(uint32_t dataPktPathId) {
 						// std::cout << "Drop packet on path " << pathTag.get_path_id() << " with seq " << ch.udp.seq << " ";
 						// std::cout << "due to admission control on switch " << GetId() << std::endl;
 					}
-
+                   //std::cout << "缓存满了，丢弃" << std::endl;
+//=======================================================
+                 // 记录丢包时各个交换机的bdp情况
+				 if (m_lbSolution == LB_Solution::LB_E2ELAPS){
+					if (m_mmu->m_SmartFlowRouting->enable_laps_plus == true ){
+					//	std::cout << "Switch " << GetId() << " 端口 " <<inDev<<"出现丢包。"<< std::endl;
+						uint32_t fullcount = 0;
+						uint32_t count = 0;
+						for(auto it = m_pid2inDev.begin(); it != m_pid2inDev.end(); it++){
+							if(it->second == inDev){
+                              auto it3 = m_pid2sid.find(it->first);
+							//源节点查找对应pid的bdp
+							if(it3 != m_pid2sid.end()){
+								Ptr<Node> srcHost = it3->second;
+								uint32_t srcHostId = srcHost->GetId();
+								Ptr<RdmaDriver> rdma_drv = srcHost->GetObject<RdmaDriver>();
+								Ptr<RdmaHw> rdmaHw = rdma_drv->m_rdma;
+								uint32_t bdp = rdmaHw->m_E2ErdmaSmartFlowRouting->m_pathBdpMap[it->first].currentBdp;
+								uint32_t maxbdp = rdmaHw->m_E2ErdmaSmartFlowRouting->m_pathBdpMap[it->first].maxBdp;
+								if(bdp>0){
+							//		std::cout << "源节点" << srcHostId << "的pid" << it->first << "的bdp：" <<  bdp<< "  最大bdp：" << maxbdp << std::endl;
+							if(bdp >=maxbdp)
+							count++;
+							fullcount++;
+								}
+								
+							}
+							}
+						}
+						//std::cout <<"bdp满载率：" << (double)count/fullcount << std::endl;
+					}
+				 }
+//=======================================================
 					return; // Drop
 				}
 				CheckAndSendPfc(inDev, qIndex);
