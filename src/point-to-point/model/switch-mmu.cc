@@ -23,7 +23,7 @@ namespace ns3 {
 	// bool SwitchMmu::isDynamicPfcThreshold = false;
 
 	SwitchMmu::SwitchMmu(void){
-		buffer_size = 32 * 1024 * 1024;
+		buffer_size = 12 * 1024 * 1024;
 		reserve = 4 * 1024;
 		resume_offset = 3 * 1024;
 
@@ -64,21 +64,12 @@ namespace ns3 {
 		// 	}
 		// }
 
-		if (psize + hdrm_bytes[port][qIndex] > headroom[port]){
-			std::ostringstream oss;
-			// oss << Simulator::Now().GetTimeStep() << " " << node_id << " Drop: queue:" << port << "," << qIndex << ": Headroom full";
-			// NS_LOG_INFO(oss.str());
-
+			if (psize + hdrm_bytes[port][qIndex] > headroom[port] && psize + GetSharedUsed(port, qIndex) > GetPfcThreshold(port)){
+			// printf("%lu %u Drop: queue:%u,%u: Headroom full\n", Simulator::Now().GetTimeStep(), node_id, port, qIndex);
 			// for (uint32_t i = 1; i < 64; i++)
-			//{
-
-			// std::cout << oss.str() << std::endl;
-			// std::cout << " psize:" << psize << " reserve:" << reserve << " shared_bytes:" << shared_bytes << " headroom[port]:" << headroom[port];
-			// std::cout << " hdrm_bytes[i][3]:" << hdrm_bytes[port][qIndex] << " ingress_bytes[i][3]:" << ingress_bytes[port][qIndex] << std::endl;
-
-			// NS_LOG_INFO("(" << hdrm_bytes[i][3] << "," << ingress_bytes[i][3] << ")");
-			//}
-			//std::cout << "缓存满了，丢弃" << std::endl;
+			// 	printf("(%u,%u)", hdrm_bytes[i][3], ingress_bytes[i][3]);
+			// std::cout<<headroom[port]<<","<<GetPfcThreshold(port);
+			// printf("\n");
 			return false;
 		}
 		return true;

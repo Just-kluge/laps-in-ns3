@@ -66,6 +66,7 @@ namespace ns3 {
 	 std::vector<std::vector<uint64_t>> QbbNetDevice::flowPacketSenGap;
 	 std::vector<uint64_t> QbbNetDevice::PacketSenGap(100, 0);
 	 std::map<std::string, uint32_t> QbbNetDevice::m_plbSwitchPathInfo;
+	 uint64_t QbbNetDevice::targetPktId = 0;
 
 	 // RdmaEgressQueue
 	 TypeId RdmaEgressQueue::GetTypeId(void)
@@ -235,6 +236,7 @@ namespace ns3 {
 			it->second.bytesLeft = qp->GetBytesLeft();
 			it->second.bytesFly = qp->GetOnTheFlyForLaps();
 			it->second.bytesLost = qp->m_irn.m_sack.getLossyDataSize();
+
 			it->second.windowSize = qp->GetWinForLaps();
 
 			if (qp->IsFinishedConst()) m_qpGrp->SetQpFinished(idx);
@@ -593,7 +595,8 @@ namespace ns3 {
 			if (result_PrbPkt == false)
 			{
 				m_phyTxDropTrace(m_currentPkt);
-				std::cerr << "Transmit Probing Packet failed" << std::endl;
+				std::cerr << "Transmit Probing Packet failed in TransmitStartOnSrcHostForLaps()" << std::endl;
+				exit(1);
 			}
 			txTime_base += txCompleteTime;
 			totalPktSize += m_currentPkt->GetSize();
@@ -651,9 +654,21 @@ namespace ns3 {
 			// 	std::cout << "Time" << Simulator::Now().GetNanoSeconds() << " ch.udp.seq:" << ch.udp.seq << " entry->lastQp->m_size:" << entry->lastQp->m_size << " Send PktId: " << pktId << " Type: DATA, Size: " << payloadSize << " Pid: " << pid << " hdr_size" << hdr_size << " pKTSize" << m_currentPkt->GetSize() << std::endl;
 			// }
 			auto e = OutStandingDataEntry(entry->lastQp->m_flow_id, ch.udp.seq, payloadSize);
-			if (entry->lastQp->m_flow_id == 7251)
+			if (   entry->lastQp->m_flow_id == 195533 && targetPktId == 0
+				// || entry->lastQp->m_flow_id == 195537 
+				// || entry->lastQp->m_flow_id == 197957
+				// || entry->lastQp->m_flow_id == 193101
+				// || entry->lastQp->m_flow_id == 329013
+				// || entry->lastQp->m_flow_id == 195541
+				// || entry->lastQp->m_flow_id == 193105
+			)
 			{
-				std::cout << e.to_string() << std::endl;
+				targetPktId = pktId;
+				std::cout << "Time: " 							<< Simulator::Now().GetNanoSeconds() 	<< ", ";
+				std::cout << "PathID: "    						<< pid 								 	<< ", ";
+				std::cout << "PktLength: " 						<< m_currentPkt->GetSize() 				<< ", ";
+				std::cout << "PktID: "    						<< pktId 								<< ", ";
+				std::cout << "[flowID, PktSeq, Payload] = " 	<< e.to_string() 						<< "\n";
 			}
 			m_rdmaOutStanding_cb(pid, e);
 			return true;
@@ -1134,7 +1149,11 @@ namespace ns3 {
 		NS_ASSERT_MSG(m_lbSolution == LB_Solution::LB_E2ELAPS, "LB Solution Must be LB_E2ELAPS");
 		NS_ASSERT_MSG(Irn::mode == Irn::Mode::NACK || Irn::mode == Irn::Mode::IRN_OPT, "LAPS::NACK should be enabled");
 		NS_ASSERT_MSG(m_node->GetNodeType() == NODE_TYPE_OF_SERVER, "Must be Called on Source Host");
-		if (!m_linkUp) return; // if link is down, return
+		if (!m_linkUp){
+		    std::cerr << "Transmit Packet failed due to m_linkUp down in DequeueAndTransmitOnSrcHostForLAPS()" << std::endl;
+		    exit(1);	
+			return; // if link is down, return
+		}
 		if (m_txMachineState == BUSY) return;	// Quit if channel busy
 		
 		int qpFlowIndex = m_rdmaEQ->GetNextQindexOnHostForLaps(m_paused);
@@ -1143,23 +1162,27 @@ namespace ns3 {
 			UpdateNxtDequeueAndTransmitTimeOnSrcHostForLaps();
 		}
 		else
-         {//如果是数据包，BDP满了就不发,限定lapsPLUS
+		{
+			//如果是数据包，BDP满了就不发,限定lapsPLUS
+		//================================================	
 			if (RdmaSmartFlowRouting::enable_laps_plus&&qpFlowIndex !=int(QINDEX_OF_ACK_PACKET_IN_SERVER)){
 				Ptr<RdmaSmartFlowRouting> m_routing = m_rdmaGetE2ELapsLBouting();
 				Ptr<RdmaQueuePair> qp = m_rdmaEQ->GetQp(qpFlowIndex);
 				Ipv4Address srcServerAddr = Ipv4Address(qp->sip);
                  Ipv4Address dstServerAddr = Ipv4Address(qp->dip);
-				 uint32_t a=m_routing->IsBDPAllFull(srcServerAddr, dstServerAddr);
-				 //a=2为减速，1为加速，0为减速  
-                  //先禁用bdp降速
-				// m_updateRateForLapsBasedOnBDPCb(qp, a);
-
+				uint32_t a=m_routing->IsBDPAllFull(srcServerAddr, dstServerAddr);
+				 //a=2,0为减速，1为加速，
+				 m_updateRateForLapsBasedOnBDPCb(qp, a);
 				 //满了就不发
 				if(a==2){
+					m_rdmaLbPktSent(qp, 1000, m_tInterframeGap);
+					DequeueAndTransmitOnSrcHostForLAPS();
 					return;
 				}
-
+                
 		}
+
+		//=============================================
 
 
 			Ptr<E2ESrcOutPackets> outEntry = GetTransmitQpContentOnSrcHostForLaps(qpFlowIndex);
@@ -1193,6 +1216,8 @@ namespace ns3 {
 		NS_LOG_FUNCTION(this << packet);
 		if (!m_linkUp){
 			m_traceDrop(packet, 0);
+		    std::cerr << "Transmit Packet failed due to m_linkUp down in Receive()" << std::endl;
+		    exit(1);	
 			return;
 		}
 
@@ -1203,12 +1228,16 @@ namespace ns3 {
 			// corrupted packet, don't forward this packet up, let it go.
 			//
 			m_phyRxDropTrace(packet);
+		    std::cerr << "Transmit Packet failed due to IsCorrupt in Receive()" << std::endl;
+		    exit(1);	
 			return;
 		}
 	if (isEnableRndPktLoss && pktCorruptRandGen.GetUniformInt() == 0)
 	{
 			m_phyRxDropTrace(packet);
 			//std::cout << "Node " << m_node->GetId() << " dev " << m_ifIndex << " drop packet at " << Simulator::Now().GetSeconds() << std::endl;
+		    std::cerr << "Transmit Packet failed due to GetUniformInt in Receive()" << std::endl;
+		    exit(1);
 			return;
 	}
 
@@ -1236,6 +1265,11 @@ namespace ns3 {
 				Resume(qIndex);
 			}
 		}else { // non-PFC packets (data, ACK, NACK, CNP...)
+			uint64_t pktId = packet->GetUid();
+			if((pktId == targetPktId) && (targetPktId != 0))
+			{
+				std::cout << "Time " << Simulator::Now().GetNanoSeconds() << ", Packet Id " << pktId << " arrive at Node " << m_node->GetId() << std::endl;
+			}
 			if (m_node->GetNodeType() == NODE_TYPE_OF_SWITCH){ // switch
 				FlowIdTag flowIdTag;
 				bool IsHaveTag = packet->PeekPacketTag(flowIdTag);
@@ -1248,8 +1282,13 @@ namespace ns3 {
 			{ // NIC
 				if (m_lbSolution == LB_Solution::LB_E2ELAPS)
 				{
+					// std::cout <<"xxxxxxxxxxxxx"<< std::endl;
 					Ptr<RdmaSmartFlowRouting> m_routing = m_rdmaGetE2ELapsLBouting();
 					bool ShouldUpForward = m_routing->RouteInput(packet, ch);
+					uint64_t pktId = packet->GetUid();
+					if((pktId == targetPktId) && (targetPktId != 0)){
+						std::cout << "After Routing, Time " << Simulator::Now().GetNanoSeconds() << ", Packet Id " << pktId << " shouldUpForward=" << ShouldUpForward << std::endl;
+					}
 					if (ShouldUpForward)
 					{
 						m_rdmaReceiveCb(packet, ch);

@@ -246,6 +246,7 @@ namespace ns3
             std::cout << "lastSelectedTimeInNs=" << lastSelectedTimeInNs << ", ";
             std::cout << "Paths=" << vectorTostring(paths) << std::endl;
         }
+        
         pstEntryData()
         {
             pathNum = 0;
@@ -458,7 +459,7 @@ namespace ns3
         int64_t lastVistTime = -1;
         uint32_t srcNodeId = 0;
         uint32_t dstNodeId = 0;
-        uint32_t windowSize = 0;
+        uint64_t windowSize = 0;
         std::string hdrInfo = "None"; 
         bool isFinished = false;
         std::string pauseReason = "None";

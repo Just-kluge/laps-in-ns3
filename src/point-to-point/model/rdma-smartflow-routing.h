@@ -97,7 +97,8 @@ namespace ns3
     //-------------------------------------------------------------------启动laps_plus-----------------------------------------------------
     static bool enable_laps_plus;
     static u_int32_t choose_softmax;
-
+     static uint64_t sum_data_receive;
+    static uint64_t sum_data;
 
     static std::vector<probeInfoEntry> m_prbInfoTable;
     static std::map<std::string, reorder_entry_t> m_reorderTable;
@@ -240,10 +241,7 @@ namespace ns3
     void RouteOutputForAckPktOnSrcHostForLaps(Ptr<E2ESrcOutPackets> entry);
     void RouteOutputForDataPktOnSrcHostForLaps(Ptr<E2ESrcOutPackets> entry);
     PathData * CheckProbePathAmoungPitEntries(std::vector<PathData *> & pitEntries);
-
-
-    
-//===========================================================新增部分====================================
+     //===========================================================新增部分====================================
 		// BDP数据结构和管理
 		struct PathBdpInfo {
 			uint64_t currentBdp;  // 当前BDP占用
@@ -253,8 +251,8 @@ namespace ns3
 		// 路径BDP管理相关
 		std::map<uint32_t, PathBdpInfo> m_pathBdpMap; // PID到BDP信息的映射
  uint32_t IsBDPAllFull(Ipv4Address srcServerAddr,Ipv4Address dstServerAddr);
- static std::map<uint32_t, Ptr<Node>> nodeIdToNodeMap;
 //===========================================================新增部分====================================
+
 
   private:
     // callback

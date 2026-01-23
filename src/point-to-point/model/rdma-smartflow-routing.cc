@@ -26,48 +26,87 @@
 namespace ns3
 {
 
-    //--------------------------------初始化laps_plus_________________________________--------------------------------------------------
+//--------------------------------初始化laps_plus_________________________________--------------------------------------------------
     bool RdmaSmartFlowRouting::enable_laps_plus = false;
-    std::map<uint32_t, Ptr<Node>> RdmaSmartFlowRouting::nodeIdToNodeMap;
-    uint32_t RdmaSmartFlowRouting::choose_softmax = 0;
+   uint32_t RdmaSmartFlowRouting::choose_softmax=0;
+  uint64_t RdmaSmartFlowRouting::sum_data_receive=0;
+    uint64_t RdmaSmartFlowRouting::sum_data=0;
     // 在类外部初始化静态成员变量
     std::vector<probeInfoEntry> RdmaSmartFlowRouting::m_prbInfoTable(0);
     std::map<std::string, reorder_entry_t> RdmaSmartFlowRouting::m_reorderTable;
     double RdmaSmartFlowRouting::laps_alpha = 1;
     std::uniform_real_distribution<double> RdmaSmartFlowRouting::rndGen(0.0, 1.0);
     std::default_random_engine RdmaSmartFlowRouting::generator(std::random_device{}());
-    std::map<uint32_t, uint32_t> RdmaSmartFlowRouting::pathPair;
+    std::map<uint32_t,uint32_t> RdmaSmartFlowRouting::pathPair;
     std::map<uint32_t, std::vector<uint32_t>> RdmaSmartFlowRouting::m_pathDelayRecordTable;
     bool RdmaSmartFlowRouting::enableRecordPathlatency = false;
 
     void RdmaSmartFlowRouting::setPathPair(std::vector<PathData> &PIT)
     {
-        for (auto &pit : PIT)
-        {
-            if (pathPair.find(pit.pid) == pathPair.end())
-            {
-                bool isFound = false;
-                std::vector<uint32_t> selfNodes = pit.nodeIdSequence;
-                for (auto &rPit : PIT)
-                {
-                    if (rPit.pid == pit.pid)
-                    {
-                        continue;
-                    }
-                    std::vector<uint32_t> peerNodes = rPit.nodeIdSequence;
-                    if (IsVectorReverse(selfNodes, peerNodes))
-                    {
-                        NS_ASSERT_MSG(pathPair.find(rPit.pid) == pathPair.end(), "The pathPair should not exist");
-                        pathPair[rPit.pid] = pit.pid;
-                        pathPair[pit.pid] = rPit.pid;
-                        // std::cout << "PathPair: " << rPit.pid << " <-> " << pit.pid << std::endl;
-                        isFound = true;
-                    }
-                }
-                NS_ASSERT_MSG(isFound, "The pathPair should be found");
+        std::map<std::string, uint32_t> m_nodeStr_to_pid;
+        std::set<uint32_t> s_pids;
+        for(auto & p : PIT){
+            if(s_pids.find(p.pid) != s_pids.end()){
+                std::cerr << "The repeated PID !" << std::endl;
+                  std::exit (1);
             }
+            std::vector<uint32_t> nodes = p.nodeIdSequence;
+            std::string nodesStr = vectorTostring<uint32_t>(nodes);
+            if(m_nodeStr_to_pid.find(nodesStr) != m_nodeStr_to_pid.end()){
+                std::cerr << "The repeated Nodes for different Paths !" << std::endl;
+                std::exit (1);
+            }
+            m_nodeStr_to_pid[nodesStr] = p.pid;
+            
+
         }
+
+
+
+        for (auto & p : PIT){
+            if(pathPair.find(p.pid) != pathPair.end()){
+                continue;
+            }
+            std::vector<uint32_t> rvs_nodes(p.nodeIdSequence.rbegin(), p.nodeIdSequence.rend());
+            std::string rvs_nodes_str = vectorTostring<uint32_t>(rvs_nodes);
+            auto it_rvs_path = m_nodeStr_to_pid.find(rvs_nodes_str);
+            if(it_rvs_path == m_nodeStr_to_pid.end()){
+                std::cerr << "Not Found the reverse path !" << std::endl;
+                std::exit (1);
+            }
+            pathPair[p.pid] = it_rvs_path->second;
+            pathPair[it_rvs_path->second] = p.pid;
+
+
+        }
+        // for (auto &pit : PIT)
+        // {
+        //     if (pathPair.find(pit.pid) == pathPair.end())
+        //     {
+        //         bool isFound = false;
+        //         std::vector<uint32_t> selfNodes = pit.nodeIdSequence;
+        //         for (auto & rPit : PIT)
+        //         {
+        //             if (rPit.pid == pit.pid)
+        //             {
+        //                 continue;
+        //             }
+        //             std::vector<uint32_t> peerNodes = rPit.nodeIdSequence;
+        //             if (IsVectorReverse(selfNodes, peerNodes))
+        //             {
+        //                 NS_ASSERT_MSG(pathPair.find(rPit.pid) == pathPair.end(), "The pathPair should not exist");
+        //                 pathPair[rPit.pid] = pit.pid;
+        //                 pathPair[pit.pid] = rPit.pid;
+        //                 // std::cout << "PathPair: " << rPit.pid << " <-> " << pit.pid << std::endl;
+        //                 isFound = true;
+        //             }
+
+        //         }
+        //         NS_ASSERT_MSG(isFound, "The pathPair should be found");
+        //     }
+        // }
     }
+
 
     NS_LOG_COMPONENT_DEFINE("RdmaSmartFlowRouting");
 
@@ -298,7 +337,7 @@ namespace ns3
             std::cout << entryCnt << construct_target_string_strlen(5 + 5 - change2string(entryCnt).size(), " ");
             std::string srcTorId = std::to_string(it->first.selfHostId);
             std::string dstHostId = std::to_string(it->first.dstHostId);
-            std::string pathKeyStr = "(" + srcTorId + ", " + dstHostId + ")";
+            std::string pathKeyStr = "(" + srcTorId + ", " + dstHostId+ ")";
             std::cout << pathKeyStr << construct_target_string_strlen(5 + 24 - change2string(pathKeyStr).size(), " ");
             uint32_t curPathNum = it->second.pathNum;
             std::cout << curPathNum << construct_target_string_strlen(5 + 7 - change2string(curPathNum).size(), " ");
@@ -720,10 +759,11 @@ namespace ns3
     {
         NS_LOG_FUNCTION(this << allPitEntries.size());
         auto maxElement = std::max_element(allPitEntries.begin(), allPitEntries.end(),
-                                           [](const PathData *lhs, const PathData *rhs)
-                                           {
-                                               return lhs->latency < rhs->latency;
-                                           });
+                [](const PathData* lhs, const PathData* rhs) 
+                {
+                    return lhs->latency < rhs->latency;
+                }
+            );
         uint64_t expiredPeriodInNs = 2 * (*maxElement)->latency;
         expiredPitEntries.clear();
         uint64_t curTime = Simulator::Now().GetNanoSeconds();
@@ -765,11 +805,13 @@ namespace ns3
         }
 
         auto maxElement = std::max_element(expiredPitEntries.begin(), expiredPitEntries.end(),
-                                           [](const PathData *lhs, const PathData *rhs)
-                                           {
-                                               return lhs->latency < rhs->latency;
-                                           });
+                [](const PathData* lhs, const PathData* rhs) 
+                {
+                    return lhs->latency < rhs->latency;
+                }
+            );
         uint64_t prbColdenPeriodInNs = 2 * (*maxElement)->latency;
+
 
         uint64_t curTime = Simulator::Now().GetNanoSeconds();
         for (auto e : expiredPitEntries)
@@ -889,10 +931,10 @@ namespace ns3
         Time oldLatencyGeneration = pitEntry->tsGeneration;
         if (newLatencyGeneration > oldLatencyGeneration)
         {
-            NS_LOG_INFO("Old Info: " << pitEntry->toString());
+            NS_LOG_INFO ("Old Info: " << pitEntry->toString());
             pitEntry->latency = newLatency;
             pitEntry->tsGeneration = newLatencyGeneration;
-            NS_LOG_INFO("New Info: " << pitEntry->toString());
+            NS_LOG_INFO ("New Info: " << pitEntry->toString());
         }
     }
 
@@ -1085,7 +1127,7 @@ namespace ns3
         update_PIT_by_probe_tag(probeTag);
         return;
     }
-
+    
     Ptr<Packet> RdmaSmartFlowRouting::reply_probe_info(Ptr<Packet> &p, CustomHeader &ch)
     {
         Ipv4SmartFlowProbeTag probeTag;
@@ -1240,7 +1282,7 @@ namespace ns3
     }
     std::vector<PathData *> RdmaSmartFlowRouting::batch_lookup_PIT(std::vector<uint32_t> &pids)
     {
-        NS_LOG_FUNCTION(this << vectorTostring(pids));
+        NS_LOG_FUNCTION(this <<  vectorTostring(pids));
         std::vector<PathData *> pitEntries(pids.size());
         for (uint32_t i = 0; i < pitEntries.size(); i++)
         {
@@ -1720,11 +1762,13 @@ namespace ns3
     {
         NS_LOG_FUNCTION(this << m_node->GetId()
                              << p->GetSize()
-                             << Simulator::Now().GetMicroSeconds());
+                             << Simulator::Now().GetMicroSeconds()
+                        );
         NS_LOG_INFO("#Node: " << m_node->GetId() << ", "
-                              << "Time: " << Simulator::Now().GetNanoSeconds() << " ns, "
-                              << "Size: " << p->GetSize() << " Bytes, "
-                              << "Receive PktID:" << p->GetUid() << " ");
+                    <<"Time: " << Simulator::Now().GetNanoSeconds() << " ns, "
+                    << "Size: " << p->GetSize() << " Bytes, " 
+                    << "Receive PktID:" << p->GetUid() << " "
+                    );
         Ipv4SmartFlowPathTag pathTag;
         bool IsHavePathTag = exist_path_tag(p, pathTag);
         NS_ASSERT_MSG(IsHavePathTag, "The path tag does not exist");
@@ -1732,53 +1776,49 @@ namespace ns3
 
         PathData *pitEntry;
         bool isReachDst = reach_the_last_hop_of_path_tag(pathTag, pitEntry);
+        // uint64_t pktId 
         if (isReachDst)
-        {
+        {   
             Ipv4SmartFlowProbeTag probeTag;
             if (exist_probe_tag(p, probeTag))
-            {
+            {   
                 // receive_probe_packet(probeTag);
                 ShouldUpForward = true;
             }
             else
-            {
+            {   
                 receive_normal_packet(p, pathTag, pitEntry);
             }
         }
         else
-        {
+        { 
             output_packet_by_path_tag(p, ch, ch.udp.pg);
             ShouldUpForward = false;
         }
         return ShouldUpForward;
     }
 
-    // 计算Softmax函数
-    std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::vector<PathData *> paths)
-    {
-        NS_LOG_FUNCTION(this << paths.size());
-        auto maxElement = std::max_element(paths.begin(), paths.end(),
-                                           [](const PathData *lhs, const PathData *rhs)
-                                           {
-                                               return lhs->theoreticalSmallestLatencyInNs < rhs->theoreticalSmallestLatencyInNs;
-                                           });
-        uint64_t maxBastDelay = (*maxElement)->theoreticalSmallestLatencyInNs;
-        NS_LOG_INFO("The targetDelay is " << maxBastDelay << " ns");
-        std::vector<double> weights(paths.size());
-        double sum_weights = 0.0;
-        // bool is9604 = false;
-        Time t = Simulator::Now();
+// 计算Softmax函数
+std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::vector<PathData *> paths) {
+    NS_LOG_FUNCTION(this << paths.size());
+    auto maxElement = std::max_element(paths.begin(), paths.end(),
+            [](const PathData* lhs, const PathData* rhs) 
+            {
+                return lhs->theoreticalSmallestLatencyInNs < rhs->theoreticalSmallestLatencyInNs;
+            }
+    );
+    uint64_t maxBastDelay = (*maxElement)->theoreticalSmallestLatencyInNs;
+    NS_LOG_INFO("The targetDelay is " << maxBastDelay << " ns");
+    std::vector<double> weights(paths.size());
+    double sum_weights = 0.0;
+    // bool is9604 = false;
+    Time t = Simulator::Now();
 
-        double total_delay = 0.0;
-        for (size_t j = 0; j < paths.size(); ++j)
-        {
-            total_delay += static_cast<double>(paths[j]->latency);
-        }
-        //===========================================================修改部分=====================================
-        for (size_t i = 0; i < weights.size(); i++)
-        {
+  //===========================================================修改部分=====================================
+       for (size_t i = 0; i < weights.size(); i++)
+        { 
             auto maps = m_pathBdpMap.find(paths[i]->pid);
-            PathBdpInfo it = maps->second;
+            PathBdpInfo it11 = maps->second;
             double multiplier;
             switch (choose_softmax)
             {
@@ -1797,85 +1837,97 @@ namespace ns3
             case 4:
                 multiplier = 20.0;
                 break;
+             case 5:
+                multiplier = 20.0;
+                break;
             default:
                 // 可选：处理非法 choose_softmax 值，例如设为默认 multiplier 或跳过
                 multiplier = laps_alpha; // 或者 throw / continue / assert 等
                 break;
             }
-
+            //========================拥塞影响部分============
+            //  double random_value = rndGen(generator);
+            // double congestionpercent=paths[i]->m_maxCongestionPercent;
+            // double c=std::max(1 - congestionpercent*congestionpercent*1.67 , 0.0);
+            // if(random_value >c )
+            // {//拥塞有概率不选路径
+            //     weights[i] = 0;
+            //     continue;
+            // }
+             //================================================
             double ratio = -1.0 * paths[i]->latency / maxBastDelay * multiplier;
 
             if (enable_laps_plus)
-            {//======================bdp判断代码，先注释====================
-               if (it.currentBdp < it.maxBdp)
+            {
+               if (it11.currentBdp < it11.maxBdp)
                 {
-              double c = paths[i]->m_maxCongestionPercent;
-               double penalty = 1.0;
-                // if (c >= 0) {
-                //     double x = c; // 归一化
-                //        penalty =x*x*4+1;      
-                // }
-               weights[i] = std::exp(ratio* penalty);
-             
+                    weights[i] = std::exp(ratio);
                 }
                 else
                 {
                     weights[i] = 0;
                 }
-         
-             
+            
+                
             }
-            else
-            {
+            else{
                 weights[i] = std::exp(ratio);
             }
 
             sum_weights += weights[i];
         }
         //===========================================================修改部分=====================================
-        NS_ASSERT_MSG(sum_weights >= 0.0, "The sum_weights is zero");
-        if (sum_weights == 0.0)
-        { // std::cout<<"ERROR sum_weights is zero"<<std::endl;
-            return weights;
-        }
-
-        for (size_t i = 0; i < weights.size(); i++)
-        {
-            weights[i] /= sum_weights;
-            NS_LOG_INFO("Path: " << paths[i]->pid << ", " << "Realtime Delay: " << paths[i]->latency << ", " << "Mininal Delay: " << paths[i]->theoreticalSmallestLatencyInNs << ", " << "Weight: " << weights[i]);
-        }
-
+    
+    NS_ASSERT_MSG(sum_weights >= 0.0, "The sum_weights is zero");
+    if (sum_weights == 0.0)
+    {
         return weights;
     }
-
-    uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> &weights)
+    
+    for (size_t i = 0; i < weights.size(); i++)
     {
-        const double random_value = rndGen(generator);
-        // std::cout << "Random Value: " << random_value << std::endl;
-        NS_ASSERT_MSG(random_value >= 0.0 && random_value <= 1.0, "Wrong random value");
-        NS_ASSERT_MSG(weights.size() > 0, "The weights is empty");
+        weights[i] /= sum_weights;
+        NS_LOG_INFO("Path: " << paths[i]->pid << ", " <<
+                    "Realtime Delay: " << paths[i]->latency << ", " <<
+                    "Mininal Delay: " << paths[i]->theoreticalSmallestLatencyInNs << ", " <<
+                    "Weight: " << weights[i]
+                   );
+     
 
-        // double sum_weights = 0.0;
-        // for (size_t i = 0; i < weights.size(); i++)
-        // {
-        //     sum_weights += weights[i];
-        // }
-        // if (sum_weights == 0.0)
-        // {
-        //     return std::rand() % weights.size();
-        // }
-
-        double cumulative_weight = 0.0;
-        for (size_t i = 0; i < weights.size(); ++i)
-        {
-            cumulative_weight += weights[i];
-            if (random_value < cumulative_weight)
-            {
-                return i;
-            }
-        }
-        return weights.size() - 1;
     }
+
+    return weights;
+}
+
+uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & weights) 
+{
+    const double random_value = rndGen(generator);
+    // std::cout << "Random Value: " << random_value << std::endl;
+    NS_ASSERT_MSG(random_value >= 0.0 && random_value <= 1.0, "Wrong random value");
+    NS_ASSERT_MSG(weights.size() > 0, "The weights is empty");
+    
+    // double sum_weights = 0.0;
+    // for (size_t i = 0; i < weights.size(); i++)
+    // {
+    //     sum_weights += weights[i];
+    // }
+    // if (sum_weights == 0.0)
+    // {
+    //     return std::rand() % weights.size();
+    // }
+    
+    double cumulative_weight = 0.0;
+    for (size_t i = 0; i < weights.size(); ++i) 
+    {
+        cumulative_weight += weights[i];
+        if (random_value < cumulative_weight) 
+        {
+            return i;
+        }
+    }
+    return weights.size() - 1;
+}
+
 
     void RdmaSmartFlowRouting::RouteOutput(Ptr<Packet> p, CustomHeader ch, Ptr<E2ESrcOutPackets> &srcOutEntry)
     {
@@ -1883,7 +1935,8 @@ namespace ns3
                              << p->GetSize()
                              << Ipv4Address(ch.sip)
                              << Ipv4Address(ch.dip)
-                             << Simulator::Now().GetMicroSeconds());
+                             << Simulator::Now().GetMicroSeconds()
+                        );
 
         Ipv4Address srcServerAddr = Ipv4Address(ch.sip);
         Ipv4Address dstServerAddr = Ipv4Address(ch.dip);
@@ -1906,7 +1959,6 @@ namespace ns3
         uint32_t fPid = pitEntries[selPathIndex]->pid;
         add_path_tag_by_path_id(srcOutEntry->dataPacket, fPid);
         update_PIT_after_adding_path_tag(pitEntries[selPathIndex]);
-
         // piggybacking if ack
         if (srcOutEntry->isAck)
         {
@@ -1942,13 +1994,15 @@ namespace ns3
         return;
     }
 
+
+
     void RdmaSmartFlowRouting::RouteOutputForDataPktOnSrcHostForLaps(Ptr<E2ESrcOutPackets> entry)
     {
         NS_LOG_FUNCTION(this << "Node: " << m_nodeId);
-        NS_ASSERT_MSG(entry && entry->isData && !entry->isAck, "invalid entry");
+		NS_ASSERT_MSG(entry && entry->isData && !entry->isAck, "invalid entry");
 
-        Ptr<Packet> p = entry->dataPacket;
-        CustomHeader ch(CustomHeader::L2_Header | CustomHeader::L3_Header | CustomHeader::L4_Header);
+		Ptr<Packet> p = entry->dataPacket;
+		CustomHeader ch(CustomHeader::L2_Header | CustomHeader::L3_Header | CustomHeader::L4_Header);
         uint32_t size = p->PeekHeader(ch);
         NS_ASSERT_MSG(size > 0, "Failed to extract CustomHeader");
         Ipv4SmartFlowPathTag pathTag;
@@ -1973,11 +2027,10 @@ namespace ns3
         add_path_tag_by_path_id(entry->dataPacket, fPid);
 
         //==================================增 加 B D P======================================================================
-        if (RdmaSmartFlowRouting::enable_laps_plus && m_pathBdpMap.find(fPid) != m_pathBdpMap.end())
-        {
+           if (RdmaSmartFlowRouting::enable_laps_plus&&m_pathBdpMap.find(fPid) != m_pathBdpMap.end()) {
             m_pathBdpMap[fPid].currentBdp += p->GetSize();
-            // std::cout << "当前BDP: " << m_pathBdpMap[fPid].currentBdp << "MAXBDP: " << m_pathBdpMap[fPid].maxBdp <<"，数据包大小"<< p->GetSize()<< std::endl;
-        }
+            //std::cout << "当前BDP: " << m_pathBdpMap[fPid].currentBdp << "MAXBDP: " << m_pathBdpMap[fPid].maxBdp <<"，数据包大小"<< p->GetSize()<< std::endl;
+           }
 
         NS_ASSERT_MSG(entry->lastQp, "The lastQp is null");
         if (!m_recordPathLantencyEvent.IsRunning() && enableRecordPathlatency)
@@ -1990,11 +2043,12 @@ namespace ns3
         {
             uint32_t payload_size = p->GetSize() - ch.GetSerializedSize();
             // entry->lastQp->m_irn.m_sack.appendOutstandingData(fPid, ch.udp.seq, payload_size);
-            // NS_LOG_INFO("PktId: " << p->GetUid()  << " Type: DATA, Size: " << payload_size <<	" Pid: " << fPid);
+			// NS_LOG_INFO("PktId: " << p->GetUid()  << " Type: DATA, Size: " << payload_size <<	" Pid: " << fPid);
             entry->latencyForDataPktInNs = pitEntries[selPathIndex]->latency;
             entry->pidForDataPkt = fPid;
         }
         update_PIT_after_adding_path_tag(pitEntries[selPathIndex]);
+
 
         // probing
         PathData *prbeEntry = CheckProbePathAmoungPitEntries(pitEntries);
@@ -2004,12 +2058,10 @@ namespace ns3
             entry->probePacket = construct_probe_packet(entry->dataPacket, ch);
             add_path_tag_by_path_id(entry->probePacket, prbeEntry->pid);
             add_probe_tag_by_path_id(entry->probePacket, prbeEntry->pid);
-            // NS_LOG_INFO("PktId: " << entry->probePacket->GetUid()  << " Type: Probe, Size: " << entry->probePacket->GetSize()-ch.GetSerializedSize() <<	" Pid: " << prbeEntry->pid);
+			// NS_LOG_INFO("PktId: " << entry->probePacket->GetUid()  << " Type: Probe, Size: " << entry->probePacket->GetSize()-ch.GetSerializedSize() <<	" Pid: " << prbeEntry->pid);
             update_PIT_after_probing(prbeEntry);
             record_the_probing_info(prbeEntry->pid);
-        }
-        else
-        {
+        }else{
             entry->isProbe = false;
             entry->probePacket = NULL;
         }
@@ -2017,13 +2069,16 @@ namespace ns3
         return;
     }
 
+
     void RdmaSmartFlowRouting::RouteOutputForAckPktOnSrcHostForLaps(Ptr<E2ESrcOutPackets> entry)
     {
         NS_LOG_FUNCTION(this << "Node: " << m_nodeId);
-        NS_ASSERT_MSG(entry && !entry->isData && entry->isAck, "invalid entry");
+		NS_ASSERT_MSG(entry && !entry->isData && entry->isAck, "invalid entry");
+        
 
-        Ptr<Packet> p = entry->ackPacket;
-        CustomHeader ch(CustomHeader::L2_Header | CustomHeader::L3_Header | CustomHeader::L4_Header);
+
+		Ptr<Packet> p = entry->ackPacket;
+		CustomHeader ch(CustomHeader::L2_Header | CustomHeader::L3_Header | CustomHeader::L4_Header);
 
         uint32_t size = p->PeekHeader(ch);
         NS_ASSERT_MSG(size > 0, "Failed to extract CustomHeader");
@@ -2066,7 +2121,7 @@ namespace ns3
         uint32_t fPid = it_rPatPid->second;
         // std::cout << "data Pid: " << ackTag.GetPathId() << ", ack pid: " << fPid << std::endl;
         add_path_tag_by_path_id(entry->ackPacket, fPid);
-        // NS_LOG_INFO("PktId: " << p->GetUid()  << " Type: ACK, Size: " << p->GetSize()-ch.GetSerializedSize() <<	" fPid: " << fPid << " rPid: " << ackTag.GetPathId());
+	    // NS_LOG_INFO("PktId: " << p->GetUid()  << " Type: ACK, Size: " << p->GetSize()-ch.GetSerializedSize() <<	" fPid: " << fPid << " rPid: " << ackTag.GetPathId());
 
         // probing
         // PathData *prbeEntry = CheckProbePathAmoungPitEntries(pitEntries);
@@ -2076,15 +2131,15 @@ namespace ns3
         //     entry->probePacket = construct_probe_packet(entry->ackPacket, ch);
         //     add_path_tag_by_path_id(entry->probePacket, prbeEntry->pid);
         //     add_probe_tag_by_path_id(entry->probePacket, prbeEntry->pid);
-        // 	// NS_LOG_INFO("PktId: " << entry->probePacket->GetUid()  << " Type: Probe, Size: " << entry->probePacket->GetSize()-ch.GetSerializedSize() <<	" Pid: " << prbeEntry->pid);
+		// 	// NS_LOG_INFO("PktId: " << entry->probePacket->GetUid()  << " Type: Probe, Size: " << entry->probePacket->GetSize()-ch.GetSerializedSize() <<	" Pid: " << prbeEntry->pid);
         //     update_PIT_after_probing(prbeEntry);
         //     record_the_probing_info(prbeEntry->pid);
         // }else{
         //     entry->isProbe = false;
         //     entry->probePacket = NULL;
         // }
-        entry->isProbe = false;
-        entry->probePacket = NULL;
+            entry->isProbe = false;
+            entry->probePacket = NULL;
         // // piggybacking
         // HostId2PathSeleKey reversePstKey(dstHostId, srcHostId);
         // pstEntryData *reversePstEntry = lookup_PST(reversePstKey);
@@ -2096,7 +2151,7 @@ namespace ns3
         return;
     }
 
-    PathData *RdmaSmartFlowRouting::CheckProbePathAmoungPitEntries(std::vector<PathData *> &pitEntries)
+    PathData * RdmaSmartFlowRouting::CheckProbePathAmoungPitEntries(std::vector<PathData *> & pitEntries)
     {
         NS_LOG_FUNCTION(this << m_nodeId);
         std::vector<PathData *> expiredPitEntries, probePitEntries;
@@ -2159,6 +2214,7 @@ namespace ns3
             NS_ASSERT_MSG(false, "The entry already exists in PIT");
             return false;
         }
+
     }
 
     bool RdmaSmartFlowRouting::insert_entry_to_SMT(hostIp2SMT_entry_t &smtEntry)
@@ -2177,6 +2233,7 @@ namespace ns3
         }
     }
 
+
     bool RdmaSmartFlowRouting::insert_entry_to_PST(pstEntryData &pstEntry)
     {
         HostId2PathSeleKey pstKey = pstEntry.key;
@@ -2193,6 +2250,7 @@ namespace ns3
             return false;
         }
     }
+
 
     void RdmaSmartFlowRouting::set_SMT(std::map<Ipv4Address, hostIp2SMT_entry_t> &vmVtepMapTbl)
     {
@@ -2273,8 +2331,8 @@ namespace ns3
         uint32_t dstHostId = lookup_SMT(dstServerAddr)->hostId;
         HostId2PathSeleKey pstKey(srcHostId, dstHostId);
         pstEntryData *pstEntry = lookup_PST(pstKey);
+         uint32_t counts = 0;
         std::vector<uint32_t> pids = pstEntry->paths;
-        uint32_t counts = 0;
         for (uint32_t i = 0; i < pids.size(); i++)
         {
             auto maps = m_pathBdpMap.find(pids[i]);
@@ -2284,19 +2342,38 @@ namespace ns3
                 counts++;
             }
         }
-         //a=2为减速，1为加速，0为不改变速率
-        if (counts == 0)
+
+        // if(counts <pids.size()){
+        //     std::vector<PathData *> pitEntries =batch_lookup_PIT(pstEntry->paths);
+        //     std::cout<<"================bdp有一个满了，降速================="<<std::endl;
+        //     uint32_t sum_currentBdp = 0;
+        //     uint32_t sum_maxBdp = 0;
+        //     for(uint32_t i = 0; i < pids.size(); i++){
+        //         auto maps = m_pathBdpMap.find(pids[i]);
+        //         PathBdpInfo it = maps->second;
+        //       std::cout<<"BDP:"<<it.currentBdp<<"， maxBdp "<<it.maxBdp<<"，使用率："<<(double)(it.currentBdp)/it.maxBdp
+        //       <<"路径长度："<<pitEntries[i]->portSequence.size()<<",当前时延："<<pitEntries[i]->latency<<std::endl;
+        //     sum_currentBdp += it.currentBdp;
+        //     sum_maxBdp += it.maxBdp;
+        //     }
+        //     std::cout<<"总使用率："<<(double)(sum_currentBdp)/sum_maxBdp<<std::endl;
+        // }
+
+        if (counts <pids.size()&&counts>0)
         {
-            return 2;//BDP满了减速
+            return 2;//存在满BDP，降速
         }
-        else if (counts ==pids.size())
+        else if (counts == pids.size())
         {
-            return 1;//现在是全部未满才加速
+            return 1;//不 存在满BDP，加速
         }
         else
         {
-            return 0;//有满BDP，减速
+            return 2;//BDP全部满了减速
         }
+        
+        
+          
     }
 
 }

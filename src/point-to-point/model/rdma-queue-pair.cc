@@ -230,6 +230,7 @@ uint64_t RdmaQueuePair::GetBytesLeft()
 	}
 	else if (Irn::mode == Irn::Mode::NACK)
 	{
+		// std::cout << "Irn::Mode::NACK in GetBytesLeft()" <<std::endl;
 		return GetBytesLeftForLaps();
 	}
 	else if (Irn::mode == Irn::Mode::GBN)

@@ -211,9 +211,7 @@ namespace ns3
 
     //-------------------------------------------------------------------新增函数-----------------------------------------------------
     uint32_t GetDataPktEgressPortForACK(uint32_t dataPktPathId);
-    std::map<uint32_t, uint32_t> m_pid2inDev;
-    std::map<uint32_t, Ptr<Node>> m_pid2sid;
-
+    
     void SendToDevContinue(Ptr<Packet> p, CustomHeader &ch);
     void SwitchNotifyDequeue(uint32_t ifIndex, uint32_t qIndex, Ptr<Packet> p);
     void SetFlowletTimeout(Time timeout);

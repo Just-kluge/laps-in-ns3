@@ -787,6 +787,8 @@ namespace ns3
     std::map<Ipv4Address, uint32_t> ip2NodeId;
     std::map<uint32_t, est_entry_t> paraMap;
     std::map<uint32_t, ecn_para_entry_t> ecnParas;
+    std::map<uint32_t, uint32_t> m_flow_cnt_per_host;
+    std::map<uint64_t, std::vector<flow_entry_t>> m_generated_flows_for_collision;
     uint32_t rdmaNicRateInGbps;
     uint32_t defaultPktSizeInByte;
     std::map<Ptr<Node>, std::map<Ptr<Node>, std::vector<Ptr<Node>>>> nextHop;

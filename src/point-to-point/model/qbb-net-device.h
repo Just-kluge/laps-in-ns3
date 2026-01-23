@@ -103,7 +103,7 @@ class QbbNetDevice : public PointToPointNetDevice
 {
 public:
   static const uint32_t qCnt = 8;	// Number of queues/priorities used
-
+  static uint64_t targetPktId;
   static TypeId GetTypeId (void);
   static RandomIntegerGenerator pktCorruptRandGen;
   static bool isEnableRndPktLoss;
@@ -233,15 +233,14 @@ public:
   static std::map<std::string, std::string> qpSendInfo;
   static std::vector<std::vector<uint64_t>> flowPacketSenGap;
   static std::vector<uint64_t> PacketSenGap;
-   // =========================在中添加回调类型定义======================================================================
-typedef Callback<void, Ptr<RdmaQueuePair>, uint32_t> RdmaUpdateRateForLapsBasedOnBDPCb;
-RdmaUpdateRateForLapsBasedOnBDPCb m_updateRateForLapsBasedOnBDPCb;
-// =========================在中添加回调类型定义======================================================================
-
 
   typedef Callback<uint32_t, std::string> PlbTableDataCb;
   PlbTableDataCb m_plbTableDataCb;
   bool PLB_LBSolution(int qIndex);
+// =========================在中添加回调类型定义======================================================================
+typedef Callback<void, Ptr<RdmaQueuePair>, uint32_t> RdmaUpdateRateForLapsBasedOnBDPCb;
+RdmaUpdateRateForLapsBasedOnBDPCb m_updateRateForLapsBasedOnBDPCb;
+// =========================在中添加回调类型定义======================================================================
 
   std::map<std::string,uint32_t>m_plblastRandNum;
   static std::map<std::string, uint32_t> m_plbSwitchPathInfo;

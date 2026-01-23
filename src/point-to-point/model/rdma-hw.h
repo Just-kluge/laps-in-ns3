@@ -90,7 +90,7 @@ namespace ns3
 		static void insertRateRecord(uint32_t flowId, uint64_t curRateInMbps);
 		static void insertPathDelayRecord(uint32_t pid, uint64_t pathDelayInNs);
 		static std::map<uint32_t, uint64_t> RecordPacketHop;
-        Ptr<Node> m_node;
+		Ptr<Node> m_node;
 		DataRate m_minRate; //< Min sending rate
 		uint32_t m_mtu;
 		CongestionControlMode m_cc_mode;
@@ -255,7 +255,6 @@ namespace ns3
 		// void HandleTimeoutForLaps(Ptr<RdmaQueuePair> qp);
 	void AddQueuePairForLaps(uint64_t size, uint16_t pg, Ipv4Address sip, Ipv4Address dip, uint16_t sport, uint16_t dport, uint32_t win, uint64_t baseRtt, int32_t flowId, Callback<void> notifyAppFinish);
 	void UpdateRateForLaps(Ptr<RdmaQueuePair> qp, CustomHeader &ch);
-	
 	int ReceiveAckForLaps(Ptr<Packet> p, CustomHeader &ch);
 	int ReceiveForLaps(Ptr<Packet> p, CustomHeader &ch);
 	bool checkRxQpFinishedOnDstHost(const CustomHeader &ch);
@@ -275,11 +274,12 @@ namespace ns3
 	// bool isPathAvailable(uint32_t flowId);
 	Time getNxtAvailTimeForQp(uint32_t flowId);
 
-//=================================新增函数=========================================================
 
+     //=================================新增函数=========================================================
       void InitializePathBdpForAllPaths(std::vector<Ptr<Node>> allNodes1) ;
 	  void decreaseBDPForPath(uint32_t pathId,uint16_t size);
-	  void UpdateRateForLapsBasedOnBDP(Ptr<RdmaQueuePair> qp,  uint32_t increaserate);
+  void UpdateRateForLapsBasedOnBDP(Ptr<RdmaQueuePair> qp,  uint32_t increaserate);
+
 
 	};
 

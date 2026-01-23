@@ -546,19 +546,19 @@ namespace ns3
      RdmaHw::m_recordQpExec[flowId].lastQpSendRate=q->m_rate.GetBitRate();
 
 
-    fprintf(os, "SIP:%08x DIP:%08x SP:%u DP:%u DataSizeInByte:%lu PktSizeInByte:%u SendPktSizeInByte:%lu StartTimeInNs:%lu LastTimeInNs:%lu EndTimeInNs:%lu BaseFctInNs:%ld\n",
-            q->sip.Get(),
-            q->dip.Get(),
-            q->sport,
-            q->dport,
-            q->m_size,
-            totalBytes,
-            q->sendDateSize,
-            q->startTime.GetNanoSeconds(),
-            (Simulator::Now() - q->startTime).GetNanoSeconds(),
-            Simulator::Now().GetNanoSeconds()
-            // baseFctInNs
-    );
+    // fprintf(os, "SIP:%08x DIP:%08x SP:%u DP:%u DataSizeInByte:%lu PktSizeInByte:%u SendPktSizeInByte:%lu StartTimeInNs:%lu LastTimeInNs:%lu EndTimeInNs:%lu BaseFctInNs:%ld\n",
+    //         q->sip.Get(),
+    //         q->dip.Get(),
+    //         q->sport,
+    //         q->dport,
+    //         q->m_size,
+    //         totalBytes,
+    //         q->sendDateSize,
+    //         q->startTime.GetNanoSeconds(),
+    //         (Simulator::Now() - q->startTime).GetNanoSeconds(),
+    //         Simulator::Now().GetNanoSeconds()
+    //         // baseFctInNs
+    // );
     // remove rxQp from the receiver
     Ptr<RdmaDriver> rdma = dstNode->GetObject<RdmaDriver>();
     rdma->m_rdma->DeleteRxQp(q->sip.Get(), q->sport, q->dport, q->m_pg);
@@ -2932,7 +2932,6 @@ namespace ns3
     add_QBB_channels(varMap);
     set_QBB_trace(varMap);
     install_rdma_driver(varMap);
-
     return;
   }
 
@@ -3314,22 +3313,13 @@ namespace ns3
    if(varMap->lbsName=="e2elaps"){
     RdmaSmartFlowRouting::enable_laps_plus=varMap->enable_laps_plus;
          RdmaSmartFlowRouting::choose_softmax=varMap->choose_softmax;
-         
-
-   }
-   RdmaSmartFlowRouting::nodeIdToNodeMap.clear();
-   for (uint32_t i = 0; i < varMap->allNodes.GetN(); i++)
-   {
-     Ptr<Node> node = varMap->allNodes.Get(i);
-     RdmaSmartFlowRouting::nodeIdToNodeMap[node->GetId()] = node;
    }
 
 
     set_switch_cc_para(varMap);
     config_switch_lb(varMap);
 
-
-  NodeContainer &svNodes = varMap->svNodes;
+     NodeContainer &svNodes = varMap->svNodes;
     uint32_t svNum = svNodes.GetN();
  // 如果启用laps_plus，在所有服务器节点安装完PIT/PST后，对所有服务器节点初始化路径BDP
     if (varMap->enable_laps_plus&&varMap->lbsName=="e2elaps")
@@ -3801,6 +3791,7 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
   void install_routing_entries(global_variable_t *varMap) {
     NS_LOG_FUNCTION(varMap->allNodes.GetN() << varMap->swNodes.GetN() << varMap->svNodes.GetN());
     if (varMap->lbsName == "e2elaps") {
+      // std::cout << "varMap->lbsName == e2elaps" << std::endl;
       install_routing_entries_for_laps(varMap);
       return;
     }
@@ -3835,9 +3826,14 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
 
   void install_routing_entries_for_laps(global_variable_t *varMap) {
     NS_LOG_FUNCTION(varMap->allNodes.GetN() << varMap->swNodes.GetN() << varMap->svNodes.GetN());
-    NS_ASSERT_MSG(varMap->lbsName == "e2elaps", "Error in lbsName");
+    if(varMap->lbsName != "e2elaps"){
+      std::cerr << "Error in lbsName for fucntion install_routing_entries_for_laps() : " << varMap->lbsName << std::endl;
+    }
+    // NS_ASSERT_MSG(varMap->lbsName == "e2elaps", "Error in lbsName");
     std::map<Ptr<Node>, std::map<Ptr<Node>, std::vector<Ptr<Node>>>> &nextHop = varMap->nextHop; // srcNode   dstNode   adjacentNodes ：   6         20       [0 1]
     uint64_t entryCntSw = 0;
+    // std::cout << "00000000000000000" << std::endl;
+
     for (auto i = nextHop.begin(); i != nextHop.end(); i++)
     {
       Ptr<Node> node = i->first; // srcNode
@@ -3880,12 +3876,18 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
       install_routing_entries_based_on_single_pst_entry_for_laps(varMap, PST[i]);
     }
     std::vector<PathData> PIT = load_PIT_from_file(varMap->pitFile);
+    // std::cout << "1111111111111111" << std::endl;
     RdmaSmartFlowRouting::setPathPair(PIT);
+    // std::cout << "222222222222222" << std::endl;
     cal_metadata_on_PIT_from_laps(varMap, PIT);
+    // std::cout << "3333333333333333" << std::endl;
+
     for (size_t i = 0; i < PIT.size(); i++)
     {
       install_routing_entries_based_on_single_pit_entry_for_laps(varMap, PIT[i]);
     }
+    std::cout << "444444444444444444" << std::endl;
+
   }
 
   void print_node_routing_tables(global_variable_t *varMap, uint32_t nodeidx)
@@ -4112,8 +4114,10 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
     // std::cout << "startTimeInSec:" << varMap->simStartTimeInSec << ", flowLunchEndTimeInSec: " <<varMap->flowLunchEndTimeInSec<< std::endl;
     double startTimeInSec = varMap->simStartTimeInSec + poission_gen_interval(varMap->requestRate); // possion distribution of start time
     // std::cout << "NewFlowStartTimeInSec:" << startTimeInSec << std::endl;
+    // std::cout << ""
     while (startTimeInSec < varMap->flowLunchEndTimeInSec)
     {
+      // std::cout << start
       // std::cout << "NewFlowStartTimeInSec:" << startTimeInSec << std::endl;
       flow_entry_t genFlow;
       // std::cout << "startTime :" << startTime << ", FLOW_LAUNCH_END_TIME : " << FLOW_LAUNCH_END_TIME << ", END_TIME : " << END_TIME;
@@ -4127,7 +4131,7 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
       genFlow.dstAddr = genFlow.dstNode->GetObject<Ipv4>()->GetAddress(1, 0).GetLocal();
       genFlow.prioGroup = varMap->flowGroupPrio;
       genFlow.byteCnt = gen_random_cdf(varMap->cdfTable);
-
+      RdmaSmartFlowRouting::sum_data+=genFlow.byteCnt;
       if (genFlow.byteCnt == 0)
       {
         continue;
@@ -4160,7 +4164,22 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
       }
       varMap->flowCount = varMap->flowCount + 1;
       genFlow.idx = varMap->flowCount;
+      if(varMap->m_flow_cnt_per_host.find(genFlow.srcNode->GetId()) == varMap->m_flow_cnt_per_host.end())
+      {
+        varMap->m_flow_cnt_per_host[genFlow.srcNode->GetId()] = 1;
+      }else
+      {
+        varMap->m_flow_cnt_per_host[genFlow.srcNode->GetId()]++;
+      }
 
+      if( varMap->m_flow_cnt_per_host[genFlow.srcNode->GetId()] >= 9120 )
+      {
+        std::cout << "Warning: Host " << genFlow.srcNode->GetId() << " has too many flows: " << varMap->m_flow_cnt_per_host[genFlow.srcNode->GetId()] << std::endl;
+      }
+
+      uint64_t keyStr = ((uint64_t)genFlow.srcAddr.Get() << 32) | ((uint64_t)genFlow.prioGroup << 16) | ((uint64_t)genFlow.dstPort << 16) | (uint64_t)genFlow.srcPort; // srcIP, srcPort
+        // std::cout << "Flow collision detected for key: " << keyStr << std::endl;
+        varMap->m_generated_flows_for_collision[keyStr].push_back(genFlow);
       varMap->genFlows.push_back(genFlow);
       varMap->totalFlowSizeInByte = varMap->totalFlowSizeInByte + genFlow.byteCnt;
       if (genFlow.byteCnt <= varMap->smallFlowThreshInByte)
@@ -4171,6 +4190,7 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
       {
         varMap->largeFlowCount = varMap->largeFlowCount + 1;
       }
+
       //genFlow.print();
       startTimeInSec = startTimeInSec + poission_gen_interval(varMap->requestRate);
     }
@@ -4262,6 +4282,23 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
         generate_rdma_flows_for_node_pair(varMap);
       }
     }
+    bool tmpFlag = false;
+    for(auto & it : varMap->m_generated_flows_for_collision)
+    {
+      if(it.second.size() > 1)
+      {
+        std::cout << "Flow collision detected for key: " << it.first << ", number of flows: " << it.second.size() << std::endl;
+        for(auto & flow : it.second)
+        {
+          flow.print();
+        }
+        tmpFlag = true;
+      }
+    }
+    if(tmpFlag)
+    {
+      std::cout << "Error: Flow collision detected!" << std::endl;
+    }
   }
 
   void install_rdma_flows_on_nodes(global_variable_t *varMap)
@@ -4317,6 +4354,7 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
     NS_LOG_INFO("generate_rdma_flows_on_nodes is finished");
     NS_LOG_INFO("flowCount: " << varMap->flowCount << ",smallFlowCount: " << varMap->smallFlowCount << ",largeFlowCount: " << varMap->largeFlowCount);
     update_EST(varMap->paraMap, "flowCount: ", varMap->flowCount);
+    std::cout << "flowCount: " << varMap->flowCount << "个.此次模拟总发送数据量: " <<(double)(RdmaSmartFlowRouting::sum_data)/1024/1024/1024 << "GB " <<std::endl;
     update_EST(varMap->paraMap, "smallFlowCount: ", varMap->smallFlowCount);
     update_EST(varMap->paraMap, "largeFlowCount: ", varMap->largeFlowCount);
     install_rdma_flows_on_nodes(varMap);
@@ -4737,12 +4775,6 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
       Config::SetDefault("ns3::RdmaHw::E2ELb", StringValue(varMap->lbsName));
       Config::SetDefault("ns3::RdmaSmartFlowRouting::enabledE2ELb", BooleanValue(true));
       varMap->irnMode = "NACK";
-      
-
-//======================================================新增部分=====================================
-    RdmaSmartFlowRouting::enable_laps_plus=varMap->enable_laps_plus;
-         RdmaSmartFlowRouting::choose_softmax=varMap->choose_softmax;
-   
     }
     if (varMap->lbsName == "plb")
     {

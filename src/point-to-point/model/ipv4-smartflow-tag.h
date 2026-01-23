@@ -80,12 +80,9 @@ namespace ns3
         std::vector<uint32_t> portSequence;
         std::vector<uint32_t> nodeIdSequence;
         uint32_t latency=0;
-
         uint32_t theoreticalSmallestLatencyInNs=0;
         uint32_t pathDre = UINT32_MAX;
-        
-        double m_maxCongestionPercent=0.0;
-        
+
         uint64_t lastpathload = 0;
         uint64_t pathload = 0;
         Time nextAvailableTime = Seconds(0);
@@ -177,15 +174,11 @@ namespace ns3
         virtual void Serialize(TagBuffer i) const;
         virtual void Deserialize(TagBuffer i);
         virtual void Print(std::ostream &os) const;
-         void SetMaxCongestionPercent(double percent);  // 添加设置拥塞百分比的方法
-         double GetMaxCongestionPercent(void) const;    // 添加获取拥塞百分比的方法
+
     private:
         uint32_t m_pathId;
         uint32_t m_flowId;
         uint64_t m_delayInNs;
-        //============================新增变量，记录路径上节点最大拥塞百分比====================
-        double m_maxCongestionPercent;
-        
     };
 
     class Ipv4SmartFlowPathTag : public Tag
