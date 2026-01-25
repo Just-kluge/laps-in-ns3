@@ -14,7 +14,7 @@
 #include "ns3/traced-callback.h"
 #include <random>
 
-#define MAX_RDMA_FLOW_PER_HOST 9120
+#define MAX_RDMA_FLOW_PER_HOST 91200
 #define BITMASK(b) (1 << ((b) % CHAR_BIT))
 #define BITSLOT(b) ((b) / CHAR_BIT)
 #define BITSET(a, b) ((a)[BITSLOT(b)] |= BITMASK(b))

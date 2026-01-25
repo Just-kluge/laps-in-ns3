@@ -1694,6 +1694,7 @@ namespace ns3
   void cal_metadata_on_PIT_from_laps(global_variable_t *varMap, std::vector<PathData> &paths)
   {
     uint64_t maxPathDelayInNs = 0, maxBdpInByte = 0;
+    
     for (size_t i = 0; i < paths.size(); i++)
     {
       auto &path = paths[i];
@@ -1715,19 +1716,37 @@ namespace ns3
         sumDelayInNs += channelDelay;
         uint64_t rateInbps = dev->GetDataRate().GetBitRate();
         minBwInbps = std::min(minBwInbps, rateInbps);
-        uint64_t txDelayInNs = uint64_t(1.0 * varMap->defaultPktSizeInByte / (1.0 * rateInbps / 1000000000lu / 8));
+        uint32_t packet_number=1;
+        //========================允许每个端口多6个数据包的容量======================================
+        if(varMap->enable_laps_plus)
+        {
+              packet_number=13;
+        }
+
+        uint64_t txDelayInNs = uint64_t( packet_number * varMap->defaultPktSizeInByte / (1.0 * rateInbps / 1000000000lu / 8));
         sumDelayInNs += txDelayInNs;
       }
       path.latency = sumDelayInNs;
       uint64_t gapInNs = uint64_t(1.0 * varMap->defaultPktSizeInByte / (1.0 * minBwInbps / 1000000000lu / 8)) * (ports.size());
       path.theoreticalSmallestLatencyInNs = sumDelayInNs + gapInNs;
-      uint64_t bdpInByte = minBwInbps * sumDelayInNs / 1000000000lu / 8;
+   
+      
+    
+    //   if(varMap->enable_laps_plus){
+    //   //========================允许每个端口多6个数据包的容量======================================
+    //   path.theoreticalSmallestLatencyInNs+=ports.size()*84*6;
+    // }
+    //std::cout<<"path.theoreticalSmallestLatencyInNs: "<<path.theoreticalSmallestLatencyInNs<<std::endl;
+     
+    
+    
+    uint64_t bdpInByte = minBwInbps * sumDelayInNs / 1000000000lu / 8;
       maxBdpInByte = std::max(maxBdpInByte, bdpInByte);
       maxPathDelayInNs = std::max(maxPathDelayInNs, sumDelayInNs);
       // path.print();
       RdmaHw::pidToThDelay[path.pid] = path.theoreticalSmallestLatencyInNs;
     }
-
+    //std::cout<<"paths.size():"<<paths.size()<<std::endl;
     varMap->maxRttInNs = maxPathDelayInNs*2;
     varMap->maxBdpInByte = maxBdpInByte;
     return;

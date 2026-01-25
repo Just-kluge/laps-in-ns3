@@ -85,6 +85,7 @@ namespace ns3 {
 	RdmaEgressQueue::RdmaEgressQueue(){
 		m_rrlast = 0;
 		m_qlast = 0;
+		 qp_index_3681=-1;
 		m_ackQ = CreateObject<DropTailQueue<Packet> >();
 		// ziven: TODO fix this, 'MaxBytes' comes from ns-3.18
 		// m_ackQ->SetAttribute("MaxBytes", UintegerValue(0xffffffff)); // queue limit is on a higher level, not here
@@ -227,7 +228,7 @@ namespace ns3 {
 			bool isPfcAllowed = !paused[qp->m_pg];
 			int32_t flowid = qp->m_flow_id;
 			auto it = RdmaHw::m_recordQpExec.find(flowid);
-
+            
 			it->second.snd_una = qp->snd_una;
 			it->second.snd_nxt = qp->snd_nxt;
 			it->second.maxNxtSeq = qp->m_irn.m_max_next_seq;
@@ -238,8 +239,29 @@ namespace ns3 {
 			it->second.bytesLost = qp->m_irn.m_sack.getLossyDataSize();
 
 			it->second.windowSize = qp->GetWinForLaps();
-
+              
 			if (qp->IsFinishedConst()) m_qpGrp->SetQpFinished(idx);
+
+
+
+
+            
+			static Time   last_update= Simulator::Now();
+			if(flowid==940&&it->second.snd_una==it->second.snd_nxt){
+				//std::cout <<"qpindex: "<<idx<< "，Flowid " << flowid << "qp结束："<<m_qpGrp->IsQpFinished(idx)<<std::endl;
+			last_update= Simulator::Now();
+			qp_index_3681=idx;
+			
+			}
+
+             if( last_update.GetNanoSeconds()>3726542&&Simulator::Now().GetNanoSeconds()-last_update.GetNanoSeconds()>1000&&qp_index_3681!=-1){
+             Ptr<RdmaQueuePair> qp1 = m_qpGrp->Get(qp_index_3681);
+			 int32_t flowid1 = qp1->m_flow_id;
+			// std::cout<<"当前轮循到qpindex:"<<idx<<"m_qpGrp大小："<<m_qpGrp->GetN()<<"，flowid"<<flowid1<<"，流3681仍然在m_qpGrp里"<< "，qp结束："<<m_qpGrp->IsQpFinished(qp_index_3681)<<std::endl;
+             
+			 }
+
+
       if (m_qpGrp->IsQpFinished(idx))
 			{
 				it->second.pauseReason = "beSetFinished";
@@ -270,7 +292,6 @@ namespace ns3 {
 				}
 				it->second.pauseReason = "+PfcPause";
 			}
-
 			bool isWinAllowed = !qp->IsWinBoundForLaps();
 			if (!isWinAllowed) it->second.pauseReason += "+Window";
 			bool isIrnAllowed = qp->CanIrnTransmitForLaps(mtuInByte);
@@ -280,6 +301,13 @@ namespace ns3 {
 			bool isTimeAvail = qp->m_nextAvail.GetTimeStep() > Simulator::Now().GetTimeStep() ? false : true;
 			if (!isTimeAvail) it->second.pauseReason += "+TimeNotAvail";
 			// int32_t flowid = qp->m_flow_id;
+
+             if(flowid==940&&it->second.snd_una==it->second.snd_nxt){
+              std::cout << " snd_una " << it->second.snd_una << " snd_nxt " << it->second.snd_nxt 
+			  <<"，isWinAllowed；"<<isWinAllowed <<"，isIrnAllowed；"<<isIrnAllowed 
+			  <<"，isDataLeft；"<<isDataLeft <<"，isTimeAvail；"<<isTimeAvail<< std::endl;
+			}
+
 
 	  if (!isPfcAllowed && isDataLeft && isWinAllowed && isIrnAllowed)
 	  {
@@ -717,6 +745,7 @@ namespace ns3 {
 
 	void QbbNetDevice::UpdateNxtDequeueAndTransmitTimeOnSrcHostForLaps()
 	{ 
+		//std::
 		NS_LOG_FUNCTION(this << "Node=" << m_node->GetId());
 		Time t = Simulator::GetMaximumSimulationTime();
 		bool valid = false;
@@ -1163,22 +1192,36 @@ namespace ns3 {
 		}
 		else
 		{
-			//如果是数据包，BDP满了就不发,限定lapsPLUS
-		//================================================	
+			
+		//===========实时时延大于基准时延，并且更新时间比较新，所有候选路径都这样，不发送=====================================	
+		
 			if (RdmaSmartFlowRouting::enable_laps_plus&&qpFlowIndex !=int(QINDEX_OF_ACK_PACKET_IN_SERVER)){
 				Ptr<RdmaSmartFlowRouting> m_routing = m_rdmaGetE2ELapsLBouting();
 				Ptr<RdmaQueuePair> qp = m_rdmaEQ->GetQp(qpFlowIndex);
 				Ipv4Address srcServerAddr = Ipv4Address(qp->sip);
                  Ipv4Address dstServerAddr = Ipv4Address(qp->dip);
-				uint32_t a=m_routing->IsBDPAllFull(srcServerAddr, dstServerAddr);
-				 //a=2,0为减速，1为加速，
-				 m_updateRateForLapsBasedOnBDPCb(qp, a);
-				 //满了就不发
-				if(a==2){
-					m_rdmaLbPktSent(qp, 1000, m_tInterframeGap);
-					DequeueAndTransmitOnSrcHostForLAPS();
-					return;
-				}
+				 uint32_t srcHostId = m_routing->lookup_SMT(srcServerAddr)->hostId;
+                 uint32_t dstHostId = m_routing->lookup_SMT(dstServerAddr)->hostId;
+                 HostId2PathSeleKey pstKey(srcHostId, dstHostId);
+                 pstEntryData *pstEntry = m_routing->lookup_PST(pstKey);
+                 uint32_t counts = 0;
+                std::vector<PathData *> pitEntries =m_routing->batch_lookup_PIT(pstEntry->paths);
+        for (uint32_t i = 0; i < pitEntries.size(); i++)
+        {
+            
+               if ((pitEntries[i]->latency > pitEntries[i]->theoreticalSmallestLatencyInNs)
+                && ((Simulator::Now().GetNanoSeconds()-pitEntries[i]->tsGeneration.GetNanoSeconds())
+				 < pitEntries[i]->theoreticalSmallestLatencyInNs) ){
+					counts++;
+				 }
+                
+        }
+		if(counts>=pitEntries.size()){
+			//std::cout<<"实时时延大于基准实验，并且更新时间比较新，所有候选路径都这样，不发送"<<std::endl;
+			m_rdmaLbPktSent(qp, 1000, m_tInterframeGap);
+			DequeueAndTransmitOnSrcHostForLAPS();
+			return ;
+		}
                 
 		}
 

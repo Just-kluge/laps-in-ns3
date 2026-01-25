@@ -31,6 +31,7 @@ namespace ns3
    uint32_t RdmaSmartFlowRouting::choose_softmax=0;
   uint64_t RdmaSmartFlowRouting::sum_data_receive=0;
     uint64_t RdmaSmartFlowRouting::sum_data=0;
+    uint64_t RdmaSmartFlowRouting::key=0;
     // 在类外部初始化静态成员变量
     std::vector<probeInfoEntry> RdmaSmartFlowRouting::m_prbInfoTable(0);
     std::map<std::string, reorder_entry_t> RdmaSmartFlowRouting::m_reorderTable;
@@ -1835,7 +1836,7 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
                 multiplier = 20.0;
                 break;
             case 4:
-                multiplier = 20.0;
+                multiplier = 1.0;
                 break;
              case 5:
                 multiplier = 20.0;
@@ -1859,12 +1860,16 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
 
             if (enable_laps_plus)
             {
-               if (it11.currentBdp < it11.maxBdp)
+               if ((paths[i]->latency < paths[i]->theoreticalSmallestLatencyInNs)
+                || ((Simulator::Now().GetNanoSeconds()-paths[i]->tsGeneration.GetNanoSeconds()) >paths[i]->theoreticalSmallestLatencyInNs))
                 {
                     weights[i] = std::exp(ratio);
                 }
                 else
                 {
+                    // std::cout<<"该路径不被选择，理由:路径实时时延："<<paths[i]->latency<<" ns, 路径基准时延："
+                    // <<paths[i]->theoreticalSmallestLatencyInNs<<" ns, 路径距离上次更新时间："<<
+                    // Simulator::Now().GetNanoSeconds()-paths[i]->tsGeneration.GetNanoSeconds()<<std::endl;
                     weights[i] = 0;
                 }
             
@@ -2360,8 +2365,10 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
         // }
 
         if (counts <pids.size()&&counts>0)
-        {
+        {   if(RdmaSmartFlowRouting::choose_softmax==1)
             return 2;//存在满BDP，降速
+            else
+            return 0;
         }
         else if (counts == pids.size())
         {

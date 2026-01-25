@@ -16,7 +16,7 @@
 #include "flow-stat-tag.h"
 #include "ns3/callback.h"
 #include <set>
-
+#include <time.h>
 namespace ns3
 {
 	// bool RdmaHw::isIrnEnabled = false;
@@ -756,6 +756,8 @@ namespace ns3
 		NS_ASSERT_MSG(flowId >= 0, "Flow ID should be non-negative");
 		uint64_t key = GetRxQpKey(dip, dport, sport, pg);
 		NS_ASSERT_MSG(m_rxQpMap.find(key) == m_rxQpMap.end(), "Flow cannot be initialized twice");
+		if(m_rxQpMap.find(key) != m_rxQpMap.end())
+		std::cout<<"Flow cannot be initialized twice"<<std::endl;
 		// if()
 		// std::cout << 
 		NS_ASSERT_MSG(m_finishedQpMap.find(key) == m_finishedQpMap.end(), "Flow cannot be initialized after finished");
@@ -1333,21 +1335,42 @@ int RdmaHw::ReceiveUdpOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 		std::cerr << "Rx cannot find the flowId Tag on Packet" << std::endl;
 		exit(1);
 	}
+	static bool check = true;
+	if ( flowId == 3681&&check){
+		check=false;
+		uint64_t key = GetRxQpKey(ch.sip, ch.udp.sport, ch.udp.dport, ch.udp.pg);
+		RdmaSmartFlowRouting::key=key;
+		std::cout << "Time: " 							<< Simulator::Now().GetNanoSeconds() 	<< ", ";
+		std::cout << "Self_Key: " 						<< key 	<< ", ";
+		std::cout << "Reason: " 					  	<< "Receive Data Packet"							<< ", ";
+		std::cout << "[FlowID, sip, sport,dport] = [" 	<< flowId << ", " << ch.sip << ", " << ch.udp.sport << ", " << ch.udp.dport << "]\n";
+		
+	}else{
+		if(RdmaSmartFlowRouting::key!=0
+		&&GetRxQpKey(ch.sip, ch.udp.sport, ch.udp.dport, ch.udp.pg)==RdmaSmartFlowRouting::key
+		&&flowId!=3681){
+			std::cout<<"Time: " 							<< Simulator::Now().GetNanoSeconds() 	<< ", ";
+			std::cout << "Self_Key: " 						<< RdmaSmartFlowRouting::key 	<< ", ";
+			std::cout << "Reason: " 					  	<< "发现key值冲突的不同流"							<< ", ";
+			std::cout << "[FlowID, sip, sport,dport] = [" 	<< flowId << ", " << ch.sip << ", " << ch.udp.sport << ", " << ch.udp.dport << "]\n";
+		}
+	}
+
 	if (checkRxQpFinishedOnDstHost(ch))	{
 
-		//if ( flowId == 177259)
+		//if ( flowId == 3681)
 		//{
-		// 	uint64_t key = GetRxQpKey(ch.sip, ch.udp.sport, ch.udp.dport, ch.udp.pg);
-		// 	uint64_t key_2 = m_finishedQpMap[key];
-		// 	Ipv4SmartFlowPathTag pathTag2;
-		// 	bool IsHavePathTag = p->PeekPacketTag(pathTag2);
-		// 	std::cout << "Time: " 							<< Simulator::Now().GetNanoSeconds() 	<< ", ";
-		// 	std::cout << "Self_Key: " 						<< key 	<< ", ";
-		// 	std::cout << "Other_Key: "	 					<< key_2 	<< ", ";
-		// 	std::cout << "PathID: "    						<< pathTag2.get_path_id() 								 	<< ", ";
-		// 	std::cout << "Reason: " 					  	<< "Reach Dst But The RxQp is wrongly finished"							<< ", ";
-		// 	std::cout << "[FlowID, PktSeq, Payload] = [" 	<< flowId << ", " << ch.udp.seq << ", " <<payload_size << "]\n";
-		// }
+			uint64_t key = GetRxQpKey(ch.sip, ch.udp.sport, ch.udp.dport, ch.udp.pg);
+			uint64_t key_2 = m_finishedQpMap[key];
+			Ipv4SmartFlowPathTag pathTag2;
+			bool IsHavePathTag = p->PeekPacketTag(pathTag2);
+			std::cout << "Time: " 							<< Simulator::Now().GetNanoSeconds() 	<< ", ";
+			std::cout << "Self_Key: " 						<< key 	<< ", ";
+			std::cout << "Other_Key: "	 					<< key_2 	<< ", ";
+			std::cout << "PathID: "    						<< pathTag2.get_path_id() 								 	<< ", ";
+			std::cout << "Reason: " 					  	<< "Reach Dst But The RxQp is wrongly finished"							<< ", ";
+			std::cout << "[FlowID, PktSeq, Payload] = [" 	<< flowId << ", " << ch.udp.seq << ", " <<payload_size << "]\n";
+		//}
 		return 1; 
 	}
 
@@ -1396,7 +1419,12 @@ int RdmaHw::ReceiveUdpOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 			int interval_start = current_interval * 10;
 			int interval_end = (current_interval + 1) * 10;
 			if (interval_end > 100) interval_end = 100; // 确保不超过100%
-			std::cout << "[" << Simulator::Now().GetSeconds() << "s] 数据接收进度: " << interval_start << "%-" << interval_end << "%" << std::endl;
+			// 获取当前真实时间
+			time_t now = time(0);
+			char* time_str = ctime(&now);
+			// 去除换行符
+			time_str[strlen(time_str)-1] = '\0';
+			std::cout << "[NOW Time:" << time_str << "] 数据接收进度已到: " << interval_start << "%" <<std::endl;
 		}
 	}///===========================================================================
 
@@ -2814,7 +2842,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 		NS_ASSERT_MSG(Irn::mode == Irn::Mode::NACK, "LAPS::NACK should be enabled");
 		auto it = m_outstanding_data.find(pid);
 		NS_ASSERT_MSG(it != m_outstanding_data.end(), "Outstanding data should exist called by HandleTimeoutForLapsPerPath");
-		std::cout << "=====================Path " << pid << " RTO Timeout Handling Start=====================" << std::endl;
+		//std::cout << "=====================Path " << pid << " RTO Timeout Handling Start=====================" << std::endl;
 		std::list<OutStandingDataEntry> & dataList = it->second;
 		std::map<uint32_t, bool> reTxNic;
 		auto it2 = dataList.begin();
@@ -2824,7 +2852,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 			uint32_t flowId = it2->flow_id;
 			uint32_t seq = it2->seq;
 			uint16_t size = it2->size;
-			std::cout << "FlowID " << flowId <<", PathID=" << pid << ", segment=[" << seq << ", " << seq+size << "] timeout retransmit" << std::endl;
+			//std::cout << "FlowID " << flowId <<", PathID=" << pid << ", segment=[" << seq << ", " << seq+size << "] timeout retransmit" << std::endl;
 			auto & qp = m_flowId2Qp[flowId];
 			NS_ASSERT_MSG(qp != NULL, "QP should exist called by HandleTimeoutForLapsPerPath");
 			qp->m_irn.m_sack.m_lossy_data.emplace_back(seq, size);
@@ -3873,13 +3901,79 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 			}
 		}
 	}
+	void RdmaHw::UpdateRateForLapsPlus(Ptr<RdmaQueuePair> qp, CustomHeader &ch)
+	{
+		NS_LOG_FUNCTION(this << "flowId" << qp->m_flow_id);
+		Ipv4Address srcServerAddr = Ipv4Address(ch.dip);
+		Ipv4Address dstServerAddr = Ipv4Address(ch.sip);
+		uint32_t srcHostId = m_E2ErdmaSmartFlowRouting->lookup_SMT(srcServerAddr)->hostId;
+		uint32_t dstHostId = m_E2ErdmaSmartFlowRouting->lookup_SMT(dstServerAddr)->hostId;
+		HostId2PathSeleKey pstKey(srcHostId, dstHostId);
+		pstEntryData *pstEntry = m_E2ErdmaSmartFlowRouting->lookup_PST(pstKey);
+		std::vector<PathData *> pitEntries = m_E2ErdmaSmartFlowRouting->batch_lookup_PIT(pstEntry->paths);
+
+		uint32_t congPathCnt = 0;
+		uint32_t curMaxDelayInNs = 0;
+		uint64_t tgtDelayInNs = qp->laps.m_tgtDelayInNs;
+		for (size_t i = 0; i < pitEntries.size(); i++)
+		{
+			if (pitEntries[i]->latency > pitEntries[i]->theoreticalSmallestLatencyInNs)
+			{
+				congPathCnt++;
+			}
+			curMaxDelayInNs = std::max(curMaxDelayInNs, pitEntries[i]->latency);
+		}
+		
+		NS_ASSERT_MSG(pitEntries.size() > 0, "The pitEntries is empty");
+
+		// auto maxElement = std::max_element(pitEntries.begin(), pitEntries.end(),
+		// 				[](const PathData* lhs, const PathData* rhs) 
+		// 				{
+		// 						return lhs->theoreticalSmallestLatencyInNs < rhs->theoreticalSmallestLatencyInNs;
+		// 				}
+		// 		);
+		// uint64_t curMaxDelayInNs = (*maxElement)->theoreticalSmallestLatencyInNs;
+		uint64_t curTimeInNs = Simulator::Now().GetNanoSeconds();
+
+		if (congPathCnt == pitEntries.size())
+		{
+			if (qp->laps.m_nxtRateDecTimeInNs < curTimeInNs)
+			{
+				// std::cout << "Decrease rate for LAPS since  curMaxDelayInNs " << curMaxDelayInNs << " tgtDelayInNs " << tgtDelayInNs << std::endl;
+				// for (size_t i = 0; i < pitEntries.size(); i++)
+				// {
+				// 	pitEntries[i]->print();
+				// }
+
+				NS_LOG_INFO("Decrease rate for LAPS");
+				int64_t timeGap = DecreaseRateForLaps(qp, tgtDelayInNs/2);
+				insertRateRecord(qp->m_flow_id, qp->laps.m_curRate.GetBitRate()/1000000/8);
+				UpdateNxtQpAvailTimeForLaps(qp, timeGap);
+			}
+		}
+		else
+		{
+			if (qp->laps.m_nxtRateIncTimeInNs < curTimeInNs)
+			{//std::cout << "increase rate for LAPS since  curMaxDelayInNs " << curMaxDelayInNs << " tgtDelayInNs " << tgtDelayInNs << std::endl;
+				
+				int64_t timeGap = IncreaseRateForLaps(qp, tgtDelayInNs);
+				UpdateNxtQpAvailTimeForLaps(qp, timeGap);
+   			insertRateRecord(qp->m_flow_id, qp->laps.m_curRate.GetBitRate()/1000000/8);
+			}
+		}
+	}
 
 
 	void RdmaHw::HandleAckLaps(Ptr<RdmaQueuePair> qp, Ptr<Packet> p, CustomHeader &ch)
 	{
 		NS_LOG_FUNCTION(this << "flowId" << qp->m_flow_id);
 		// m_E2ErdmaSmartFlowRouting->update_PIT_by_latency_tag(p);
-		//UpdateRateForLaps(qp, ch);
+		if(RdmaSmartFlowRouting::enable_laps_plus){
+        UpdateRateForLapsPlus(qp, ch);
+		}
+		else{
+		UpdateRateForLaps(qp, ch);
+		}
 	}
 
 

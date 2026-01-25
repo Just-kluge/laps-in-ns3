@@ -99,6 +99,7 @@ namespace ns3
     static u_int32_t choose_softmax;
      static uint64_t sum_data_receive;
     static uint64_t sum_data;
+     static uint64_t key;
 
     static std::vector<probeInfoEntry> m_prbInfoTable;
     static std::map<std::string, reorder_entry_t> m_reorderTable;

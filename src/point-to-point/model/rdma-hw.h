@@ -255,6 +255,9 @@ namespace ns3
 		// void HandleTimeoutForLaps(Ptr<RdmaQueuePair> qp);
 	void AddQueuePairForLaps(uint64_t size, uint16_t pg, Ipv4Address sip, Ipv4Address dip, uint16_t sport, uint16_t dport, uint32_t win, uint64_t baseRtt, int32_t flowId, Callback<void> notifyAppFinish);
 	void UpdateRateForLaps(Ptr<RdmaQueuePair> qp, CustomHeader &ch);
+
+	void UpdateRateForLapsPlus(Ptr<RdmaQueuePair> qp, CustomHeader &ch);
+
 	int ReceiveAckForLaps(Ptr<Packet> p, CustomHeader &ch);
 	int ReceiveForLaps(Ptr<Packet> p, CustomHeader &ch);
 	bool checkRxQpFinishedOnDstHost(const CustomHeader &ch);
