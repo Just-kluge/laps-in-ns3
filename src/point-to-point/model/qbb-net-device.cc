@@ -1209,7 +1209,7 @@ namespace ns3 {
         for (uint32_t i = 0; i < pitEntries.size(); i++)
         {
             
-               if ((pitEntries[i]->latency > pitEntries[i]->theoreticalSmallestLatencyInNs)
+               if ((pitEntries[i]->latency > pitEntries[i]->theoreticalSmallestLatencyInNs*1.1)
                 && ((Simulator::Now().GetNanoSeconds()-pitEntries[i]->tsGeneration.GetNanoSeconds())
 				 < pitEntries[i]->theoreticalSmallestLatencyInNs) ){
 					counts++;

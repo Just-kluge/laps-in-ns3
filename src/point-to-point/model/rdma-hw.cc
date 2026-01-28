@@ -1996,6 +1996,11 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 			NS_ASSERT_MSG(pitEntry != NULL, "Invalid path id");
 			pitEntry->latency = delayInNs;
 			pitEntry->tsGeneration = Simulator::Now();
+
+			//====================时延更新，重置================================================
+			pitEntry->sent_pkt_num=0;
+			//std::cout << "收到数据包ACK时延更新，重置" << std::endl;
+  
 			// if (pitEntry->latency <= pitEntry->theoreticalSmallestLatencyInNs)
 			// {
 			// 	pitEntry->nextAvailableTime = Simulator::Now();
@@ -2072,6 +2077,10 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 			//  pitEntry->print();
 			pitEntry->latency = delayInNs;
 			pitEntry->tsGeneration = Simulator::Now();
+
+			//====================时延更新，重置================================================
+			pitEntry->sent_pkt_num=0;
+			//std::cout << "Node " << m_node->GetId() << " Receive Probe ACK Packet for path " << f_pid << std::endl;
 			// if (pitEntry->latency <= pitEntry->theoreticalSmallestLatencyInNs)
 			// {
 			// 	pitEntry->nextAvailableTime = Simulator::Now();
@@ -3916,7 +3925,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 		uint32_t curMaxDelayInNs = 0;
 		uint64_t tgtDelayInNs = qp->laps.m_tgtDelayInNs;
 		for (size_t i = 0; i < pitEntries.size(); i++)
-		{
+		{    //if (pitEntries[i]->latency >tgtDelayInNs)
 			if (pitEntries[i]->latency > pitEntries[i]->theoreticalSmallestLatencyInNs)
 			{
 				congPathCnt++;
@@ -3946,7 +3955,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 				// }
 
 				NS_LOG_INFO("Decrease rate for LAPS");
-				int64_t timeGap = DecreaseRateForLaps(qp, tgtDelayInNs/2);
+				int64_t timeGap = DecreaseRateForLaps(qp, tgtDelayInNs*2);
 				insertRateRecord(qp->m_flow_id, qp->laps.m_curRate.GetBitRate()/1000000/8);
 				UpdateNxtQpAvailTimeForLaps(qp, timeGap);
 			}

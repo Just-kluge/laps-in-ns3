@@ -1029,7 +1029,7 @@ namespace ns3
 	}
 	int SwitchNode::GetOutDev(Ptr<Packet> p, CustomHeader &ch)
 	{
-		std::cout << "SwitchNode::GetOutDev called" << std::endl;
+		//std::cout << "SwitchNode::GetOutDev called" << std::endl;
 		uint32_t swnodeid = GetId();
 		switch (m_lbSolution)
 		{

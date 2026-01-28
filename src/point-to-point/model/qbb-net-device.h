@@ -67,6 +67,7 @@ public:
 	static uint32_t ack_q_idx;
   static uint32_t mtuInByte;
   static bool isAckHighPriority;
+    u_int32_t qp_index_3681;
 	int m_qlast;
 	uint32_t m_rrlast;
 	Ptr<DropTailQueue<Packet> > m_ackQ; // highest priority queue

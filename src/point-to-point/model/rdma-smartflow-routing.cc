@@ -1800,7 +1800,7 @@ namespace ns3
     }
 
 // 计算Softmax函数
-std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::vector<PathData *> paths) {
+std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::vector<PathData *> paths, u_int32_t ch_seq) {
     NS_LOG_FUNCTION(this << paths.size());
     auto maxElement = std::max_element(paths.begin(), paths.end(),
             [](const PathData* lhs, const PathData* rhs) 
@@ -1814,9 +1814,48 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
     double sum_weights = 0.0;
     // bool is9604 = false;
     Time t = Simulator::Now();
+//=========================================新增前10kB数据优待部分=====================================
+     bool is_first_10KB=false;
+     if(ch_seq!=1&&ch_seq<=10000){
+        is_first_10KB = true;
+     }
+      // 如果是第一个10KB数据，则找出延迟最小的路径并将其权重设为1，其他路径权重设为0
+      //if(RdmaSmartFlowRouting::choose_softmax==2)
+      if(true)
+      {
+        if (is_first_10KB) {
+        // 找到延迟最小的路径索引
+        size_t minLatencyIndex = 0;
+        uint32_t minLatency = paths[0]->latency+1004*paths[0]->portSequence.size()+84*paths[0]->sent_pkt_num;
+        // std::cout<<" ========================================================="<<std::endl;
+        //  std::cout<<" 前10kB数据,seq:"<<ch_seq<<std::endl;
+        for (size_t i = 1; i < paths.size(); i++) {
+           // std::cout << "paths["<<i<<"]->latency " << paths[i]->latency << std::endl;
+            if ((paths[i]->latency+1004*paths[i]->portSequence.size()+84*paths[i]->sent_pkt_num) < minLatency) {
+                minLatency = paths[i]->latency+1004*paths[i]->portSequence.size()+84*paths[i]->sent_pkt_num;
+                minLatencyIndex = i;
+            }
+        }
+        
+        // 将最小延迟路径的权重设为1，其他路径权重设为0
+        for (size_t i = 0; i < weights.size(); i++) {
+            if (i == minLatencyIndex) {
+              //  std::cout << "权重为1的最短路径："<<minLatencyIndex<<"，latency " << paths[minLatencyIndex]->latency << std::endl;
+                weights[i] = 1.0;
+            } else {
+                weights[i] = 0.0;
+            }
+        }
+        
+        return weights;
+    }
+      }
+    
 
+  
   //===========================================================修改部分=====================================
-       for (size_t i = 0; i < weights.size(); i++)
+       //std::cout<<"=========================================================="<<std::endl;
+  for (size_t i = 0; i < weights.size(); i++)
         { 
             auto maps = m_pathBdpMap.find(paths[i]->pid);
             PathBdpInfo it11 = maps->second;
@@ -1827,16 +1866,16 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
                 multiplier = laps_alpha;
                 break;
             case 1:
-                multiplier = 20.0;
+                multiplier = 5.0;
                 break;
             case 2:
-                multiplier = 20.0;
+                multiplier = 5.0;
                 break;
             case 3:
-                multiplier = 20.0;
+                multiplier = 5.0;
                 break;
             case 4:
-                multiplier = 1.0;
+                multiplier = 20.0;
                 break;
              case 5:
                 multiplier = 20.0;
@@ -1856,26 +1895,33 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
             //     continue;
             // }
              //================================================
-            double ratio = -1.0 * paths[i]->latency / maxBastDelay * multiplier;
+           
 
             if (enable_laps_plus)
-            {
-               if ((paths[i]->latency < paths[i]->theoreticalSmallestLatencyInNs)
-                || ((Simulator::Now().GetNanoSeconds()-paths[i]->tsGeneration.GetNanoSeconds()) >paths[i]->theoreticalSmallestLatencyInNs))
-                {
-                    weights[i] = std::exp(ratio);
-                }
-                else
-                {
-                    // std::cout<<"该路径不被选择，理由:路径实时时延："<<paths[i]->latency<<" ns, 路径基准时延："
-                    // <<paths[i]->theoreticalSmallestLatencyInNs<<" ns, 路径距离上次更新时间："<<
-                    // Simulator::Now().GetNanoSeconds()-paths[i]->tsGeneration.GetNanoSeconds()<<std::endl;
-                    weights[i] = 0;
-                }
+            { 
+                double ratio = -1.0 * (paths[i]->latency+84*paths[i]->sent_pkt_num )/ maxBastDelay * multiplier;
+            //std::cout<<"pid "<<paths[i]->pid<<",paths["<<i<<"]->latency " << paths[i]->latency << ", paths["<<i<<"]->sent_pkt_num " << paths[i]->sent_pkt_num<<",sum"<< paths[i]->latency+84*paths[i]->sent_pkt_num <<std::endl;
+            weights[i] = std::exp(ratio);
+
+                //    if ((paths[i]->latency < paths[i]->theoreticalSmallestLatencyInNs)
+            //     || ((Simulator::Now().GetNanoSeconds()-paths[i]->tsGeneration.GetNanoSeconds()) >paths[i]->theoreticalSmallestLatencyInNs))
+            //     {
+            //         weights[i] = std::exp(ratio);
+            //     }
+            //     else
+            //     {
+            //         // std::cout<<"该路径不被选择，理由:路径实时时延："<<paths[i]->latency<<" ns, 路径基准时延："
+            //         // <<paths[i]->theoreticalSmallestLatencyInNs<<" ns, 路径距离上次更新时间："<<
+            //         // Simulator::Now().GetNanoSeconds()-paths[i]->tsGeneration.GetNanoSeconds()<<std::endl;
+            //         weights[i] = 0;
+            //     }
             
+
+
                 
             }
             else{
+                double ratio = -1.0 * paths[i]->latency / maxBastDelay * multiplier;
                 weights[i] = std::exp(ratio);
             }
 
@@ -2025,7 +2071,9 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
         HostId2PathSeleKey pstKey(srcHostId, dstHostId);
         pstEntryData *pstEntry = lookup_PST(pstKey);
         std::vector<PathData *> pitEntries = batch_lookup_PIT(pstEntry->paths);
-        std::vector<double> weights = CalPathWeightBasedOnDelay(pitEntries);
+
+        std::vector<double> weights = CalPathWeightBasedOnDelay(pitEntries,ch.udp.seq);
+
         uint32_t selPathIndex = GetPathBasedOnWeight(weights);
         NS_ASSERT_MSG(selPathIndex < pitEntries.size(), "The selected path index is out of range");
         uint32_t fPid = pitEntries[selPathIndex]->pid;
@@ -2054,6 +2102,9 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
         }
         update_PIT_after_adding_path_tag(pitEntries[selPathIndex]);
 
+       //===============================记录该路径距离上次路径时延更新后发了多少包===================================
+        pitEntries[selPathIndex]->sent_pkt_num++;
+         //std::cout<<"PktId: "<<p->GetUid()<<" Pid: "<<fPid<<" "<<pitEntries[selPathIndex]->sent_pkt_num<<std::endl;
 
         // probing
         PathData *prbeEntry = CheckProbePathAmoungPitEntries(pitEntries);
@@ -2061,6 +2112,7 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
         {
             entry->isProbe = true;
             entry->probePacket = construct_probe_packet(entry->dataPacket, ch);
+             //std::cout<<"PktId: "<<entry->probePacket->GetUid()<<" Pid: "<<prbeEntry->pid<<std::endl;
             add_path_tag_by_path_id(entry->probePacket, prbeEntry->pid);
             add_probe_tag_by_path_id(entry->probePacket, prbeEntry->pid);
 			// NS_LOG_INFO("PktId: " << entry->probePacket->GetUid()  << " Type: Probe, Size: " << entry->probePacket->GetSize()-ch.GetSerializedSize() <<	" Pid: " << prbeEntry->pid);

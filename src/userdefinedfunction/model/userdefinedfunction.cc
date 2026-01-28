@@ -1717,10 +1717,10 @@ namespace ns3
         uint64_t rateInbps = dev->GetDataRate().GetBitRate();
         minBwInbps = std::min(minBwInbps, rateInbps);
         uint32_t packet_number=1;
-        //========================允许每个端口多6个数据包的容量======================================
+        //========================允许每个端口多24个数据包的容量======================================
         if(varMap->enable_laps_plus)
         {
-              packet_number=13;
+              packet_number=25;
         }
 
         uint64_t txDelayInNs = uint64_t( packet_number * varMap->defaultPktSizeInByte / (1.0 * rateInbps / 1000000000lu / 8));
@@ -2432,20 +2432,28 @@ namespace ns3
     std::map<uint32_t, QpRecordEntry> & recordMap = RdmaHw::m_recordQpExec;
     std::vector<std::pair<uint32_t, QpRecordEntry>> recordVec(recordMap.begin(), recordMap.end());
 
-    // 使用 std::sort 按照 flowsize 进行排序
+    // 使用 std::sort 按照FCT 进行排序
     std::sort(recordVec.begin(), recordVec.end(),
               [](const std::pair<uint32_t, QpRecordEntry>& a, const std::pair<uint32_t, QpRecordEntry>& b)
                 {
                   return (a.second.finishTime-a.second.installTime) < (b.second.finishTime-b.second.installTime);
                 }
             );
+    //            // 使用 std::sort 按照 flowsize 进行排序
+    // std::sort(recordVec.begin(), recordVec.end(),
+    //           [](const std::pair<uint32_t, QpRecordEntry>& a, const std::pair<uint32_t, QpRecordEntry>& b)
+    //             {
+    //               return (a.second.flowsize) < (b.second.flowsize);
+    //             }
+    //         );
         
     std::string title = QpRecordEntry::get_title();
     fprintf(file, "Index     %s\n", title.c_str());
     uint32_t flow_index = 0;
     uint32_t flow_cnt = recordVec.size();
-    uint32_t small_flow_cnt = uint32_t(flow_cnt * 0.5);
-    uint32_t max_small_flow_index = small_flow_cnt;
+    // uint32_t small_flow_cnt = uint32_t(flow_cnt * 0.5);
+    // uint32_t max_small_flow_index = small_flow_cnt;
+    uint32_t small_flow_cnt =0;
     uint32_t small_flow_index_99 = uint32_t(small_flow_cnt * 0.99);
     uint32_t large_flow_cnt = uint32_t(flow_cnt * 0.1);
     uint32_t flow_index_99 = uint32_t(flow_cnt * 0.99);
@@ -2455,9 +2463,10 @@ namespace ns3
     for (auto r : recordVec) {
         fprintf(file, "%-10d %s\n", flow_index, r.second.to_string().c_str());
         double fct = 1.0*(r.second.finishTime - r.second.installTime)/1000;
-        if (flow_index < max_small_flow_index)
+        if (r.second.flowsize <= 10240)
         {
           total_fct_small += fct;
+          small_flow_cnt++;
         }
         else if (flow_index >= min_large_flow_index)
         {
@@ -2475,7 +2484,7 @@ namespace ns3
         flow_index++;
     }
     double avg_fct = total_fct / flow_cnt;
-    double avg_fct_small = total_fct_small / small_flow_cnt;
+    double avg_fct_small = total_fct_small==0? 0: total_fct_small / small_flow_cnt;
     double avg_fct_large = total_fct_large / large_flow_cnt;
     fprintf(file, "avg_fct %f\n", avg_fct);
     fprintf(file, "avg_fct_small %f\n", avg_fct_small);
@@ -2485,7 +2494,7 @@ namespace ns3
     fprintf(file, "flow_cnt %d\n", flow_cnt);
     fprintf(file, "small_flow_cnt %d\n", small_flow_cnt);
     fprintf(file, "large_flow_cnt %d\n", large_flow_cnt);
-    fprintf(file, "max_small_flow_index %d\n", max_small_flow_index);
+    fprintf(file, "max_small_flow_index %d\n",  small_flow_cnt);
     fprintf(file, "min_large_flow_index %d\n", min_large_flow_index);
     fprintf(file, "99_small_flow_index %d\n", small_flow_index_99);
     fprintf(file, "99_flow_index %d\n", flow_index_99);

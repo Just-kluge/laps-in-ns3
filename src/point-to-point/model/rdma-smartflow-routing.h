@@ -213,7 +213,7 @@ namespace ns3
     bool insert_entry_to_PST(pstEntryData &pstEntry);
     bool insert_entry_to_SMT(hostIp2SMT_entry_t &smtEntry);
 
-    std::vector<double> CalPathWeightBasedOnDelay(const std::vector<PathData *> paths);
+    std::vector<double> CalPathWeightBasedOnDelay(const std::vector<PathData *> paths , u_int32_t ch_seq=1);
     uint32_t GetPathBasedOnWeight(const std::vector<double> & weights);
 
 
