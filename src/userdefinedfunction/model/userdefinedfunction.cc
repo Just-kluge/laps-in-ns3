@@ -1727,9 +1727,10 @@ namespace ns3
         sumDelayInNs += txDelayInNs;
       }
       path.latency = sumDelayInNs;
+      //std::cout<<"path.latency: "<<path.latency;
       uint64_t gapInNs = uint64_t(1.0 * varMap->defaultPktSizeInByte / (1.0 * minBwInbps / 1000000000lu / 8)) * (ports.size());
       path.theoreticalSmallestLatencyInNs = sumDelayInNs + gapInNs;
-   
+      //std::cout<<",gapInNs: "<<gapInNs<<std::endl;
       
     
     //   if(varMap->enable_laps_plus){
@@ -2429,6 +2430,14 @@ namespace ns3
       perror("Error opening file");
       return;
     }
+
+    ///////////////////////========================================
+
+//RdmaSmartFlowRouting::s_relErrorStats.Dump(varMap->outputFileDir);
+// RdmaSmartFlowRouting::s_relErrorStats.DumpHopDiffStats(varMap->outputFileDir);
+//RdmaSmartFlowRouting::s_relErrorStats.DumpCongestionDiffStats(varMap->outputFileDir);
+
+
     std::map<uint32_t, QpRecordEntry> & recordMap = RdmaHw::m_recordQpExec;
     std::vector<std::pair<uint32_t, QpRecordEntry>> recordVec(recordMap.begin(), recordMap.end());
 
@@ -3341,6 +3350,13 @@ namespace ns3
    if(varMap->lbsName=="e2elaps"){
     RdmaSmartFlowRouting::enable_laps_plus=varMap->enable_laps_plus;
          RdmaSmartFlowRouting::choose_softmax=varMap->choose_softmax;
+   }
+      RdmaSmartFlowRouting::nodeIdToNodeMap.clear();
+   for (uint32_t i = 0; i < varMap->allNodes.GetN(); i++)
+   {
+     Ptr<Node> node = varMap->allNodes.Get(i);
+     RdmaSmartFlowRouting::nodeIdToNodeMap[node->GetId()] = node;
+     //std::cout <<i<< "node " << node->GetId() << " " << node->GetObject<Ipv4>()->GetAddress(1, 0).GetLocal() << std::endl;
    }
 
 

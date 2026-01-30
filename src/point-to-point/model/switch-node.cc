@@ -1435,7 +1435,7 @@ uint32_t SwitchNode::GetDataPktEgressPortForACK(uint32_t dataPktPathId) {
 				}
 
 				//加上一个正常数据包大小此时才能够当成真正的排队时延，不过数据包大小设置成1024，是否合理还有待商榷。
-				sum_pkt += (1024 - p->GetSize());
+				sum_pkt += (1048 - p->GetSize());
 				//std::cout << "  数据比特总量：" << sum_pkt << std::endl << std::endl << std::endl;
 				//得到出端口的链路速率
 				uint64_t current_port_rate = m_outPort2BitRateMap[dataPktselectedPortId];

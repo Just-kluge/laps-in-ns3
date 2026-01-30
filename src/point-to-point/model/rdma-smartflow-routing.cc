@@ -28,6 +28,10 @@ namespace ns3
 
 //--------------------------------初始化laps_plus_________________________________--------------------------------------------------
     bool RdmaSmartFlowRouting::enable_laps_plus = false;
+    std::map<uint32_t, Ptr<Node>> RdmaSmartFlowRouting::nodeIdToNodeMap;
+    
+     RelErrorStats RdmaSmartFlowRouting::s_relErrorStats;
+
    uint32_t RdmaSmartFlowRouting::choose_softmax=0;
   uint64_t RdmaSmartFlowRouting::sum_data_receive=0;
     uint64_t RdmaSmartFlowRouting::sum_data=0;
@@ -41,7 +45,7 @@ namespace ns3
     std::map<uint32_t,uint32_t> RdmaSmartFlowRouting::pathPair;
     std::map<uint32_t, std::vector<uint32_t>> RdmaSmartFlowRouting::m_pathDelayRecordTable;
     bool RdmaSmartFlowRouting::enableRecordPathlatency = false;
-
+    
     void RdmaSmartFlowRouting::setPathPair(std::vector<PathData> &PIT)
     {
         std::map<std::string, uint32_t> m_nodeStr_to_pid;
@@ -1852,7 +1856,7 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
       }
     
 
-  
+     bool is_have_good_path=false;
   //===========================================================修改部分=====================================
        //std::cout<<"=========================================================="<<std::endl;
   for (size_t i = 0; i < weights.size(); i++)
@@ -1866,19 +1870,19 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
                 multiplier = laps_alpha;
                 break;
             case 1:
-                multiplier = 5.0;
+                multiplier = 10.0;
                 break;
             case 2:
-                multiplier = 5.0;
+                multiplier = 10.0;
                 break;
             case 3:
-                multiplier = 5.0;
+                multiplier = 10.0;
                 break;
             case 4:
-                multiplier = 20.0;
+                multiplier = 10.0;
                 break;
              case 5:
-                multiplier = 20.0;
+                multiplier = 10.0;
                 break;
             default:
                 // 可选：处理非法 choose_softmax 值，例如设为默认 multiplier 或跳过
@@ -1901,7 +1905,12 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
             { 
                 double ratio = -1.0 * (paths[i]->latency+84*paths[i]->sent_pkt_num )/ maxBastDelay * multiplier;
             //std::cout<<"pid "<<paths[i]->pid<<",paths["<<i<<"]->latency " << paths[i]->latency << ", paths["<<i<<"]->sent_pkt_num " << paths[i]->sent_pkt_num<<",sum"<< paths[i]->latency+84*paths[i]->sent_pkt_num <<std::endl;
-            weights[i] = std::exp(ratio);
+           
+           
+           
+            //weights[i] = std::exp(ratio);
+            weights[i] = std::pow(2.0, ratio);
+
 
                 //    if ((paths[i]->latency < paths[i]->theoreticalSmallestLatencyInNs)
             //     || ((Simulator::Now().GetNanoSeconds()-paths[i]->tsGeneration.GetNanoSeconds()) >paths[i]->theoreticalSmallestLatencyInNs))
@@ -1936,8 +1945,12 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
     }
     
     for (size_t i = 0; i < weights.size(); i++)
-    {
+    {          
         weights[i] /= sum_weights;
+        if(weights[i]>0.9)
+        {
+            is_have_good_path=true;
+        }
         NS_LOG_INFO("Path: " << paths[i]->pid << ", " <<
                     "Realtime Delay: " << paths[i]->latency << ", " <<
                     "Mininal Delay: " << paths[i]->theoreticalSmallestLatencyInNs << ", " <<
@@ -1945,6 +1958,21 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
                    );
      
 
+    }
+    if(is_have_good_path)
+    {
+        std::cout<<"=========================================================="<<std::endl;
+          for (size_t i = 0; i < weights.size(); i++)
+    {          
+        std::cout<<"Path: " << paths[i]->pid << ", " <<
+                    "Realtime Delay: " << paths[i]->latency << ", " <<
+                    "Mininal Delay: " << paths[i]->theoreticalSmallestLatencyInNs << ", " <<
+                    "Weight: " << weights[i]<<std::endl;
+                   
+     
+
+    }
+      
     }
 
     return weights;

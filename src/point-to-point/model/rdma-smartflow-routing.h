@@ -21,7 +21,7 @@
 #include "common-user-model.h"
 #include "rdma-queue-pair.h"
 #include <random>
-
+#include <cstdlib>   // for std::llabs
 
 #define DEFAULT_PATH_ID 999999
 #define DEFAULT_PATH_INDEX 999999999
@@ -84,6 +84,243 @@ namespace ns3
     }
     E2ESrcOutPackets() : dataPacket(NULL), probePacket(NULL), ackPacket(NULL), isData(false), isProbe(false), isAck(false), lastQp(NULL) {}
   };
+
+
+
+//========================相对误差记录====================
+struct RelErrorStats
+{
+    // 0.1% 精度
+    static constexpr int32_t SCALE = 1000;
+
+    // [-200%, +200%]
+    static constexpr int32_t MIN_VAL = -2000;
+    static constexpr int32_t MAX_VAL =  2000;
+    static constexpr uint32_t BIN_NUM = MAX_VAL - MIN_VAL + 1;
+
+    // 相对误差分布
+    std::vector<uint64_t> ack_bins;
+    std::vector<uint64_t> e2e_bins;
+//=====路径跳数维度,统计跳数越大，实验测量误差越大-=========================
+   struct HopDiffStats
+{
+    uint64_t sample_cnt = 0;
+
+    int64_t ack_diff_sum  = 0;  // Σ(ack_ns - real_ns)
+    int64_t data_diff_sum = 0;  // Σ(data_ns - real_ns)
+};
+// hop_count -> statistics
+std::map<uint32_t, HopDiffStats> hop_diff_table;
+inline void RecordHopDiff(uint32_t hop,
+                          int64_t real_ns,
+                          int64_t ack_ns,
+                          int64_t data_ns)
+{
+    if (real_ns <= 0) return;
+
+    auto &stat = hop_diff_table[hop];
+    stat.sample_cnt++;
+
+stat.ack_diff_sum  += std::llabs(ack_ns  - real_ns);
+stat.data_diff_sum += std::llabs(data_ns - real_ns);
+//std::cout << "hop: " << hop << " real_ns: " << real_ns << " ack_ns: " << ack_ns << " data_ns: " << data_ns << " ack_diff: " << stat.ack_diff_sum << " data_diff: " << stat.data_diff_sum << std::endl;
+}
+void DumpHopDiffStats(const std::string &basePath)
+{
+    std::string file_name = basePath + "hop_diff.txt";
+    FILE *file = fopen(file_name.c_str(), "w");
+    if (file == nullptr)
+    {
+        perror("Error opening hop diff file");
+        return;
+    }
+
+    // 每一行：hop_cnt sample_cnt avg_ack_abs_diff(ns) avg_data_abs_diff(ns)
+    for (const auto &kv : hop_diff_table)
+    {
+        uint32_t hop = kv.first;
+        const HopDiffStats &stat = kv.second;
+
+        if (stat.sample_cnt == 0)
+            continue;
+
+        double ack_avg  = double(stat.ack_diff_sum)  / stat.sample_cnt;
+        double data_avg = double(stat.data_diff_sum) / stat.sample_cnt;
+
+        fprintf(file, "%u %lu %.3f %.3f\n",
+                hop,
+                stat.sample_cnt,
+                ack_avg,
+                data_avg);
+    }
+
+    fflush(file);
+    fclose(file);
+}
+
+//=====路径跳数维度,统计跳数越大，实验测量误差越大-=========================
+
+//=====拥塞度维度,拥塞度越大，实验测量误差越大-=========================
+
+enum CongestionLevel
+{
+    C2  = 2,
+    C4  = 4,
+    C6  = 6,
+    C8  = 8,
+    C10 = 10
+};
+
+struct CongDiffStats
+{
+    uint64_t sample_cnt = 0;
+
+    int64_t ack_diff_sum  = 0;
+    int64_t data_diff_sum = 0;
+};
+
+std::map<CongestionLevel, CongDiffStats> cong_diff_table;
+inline void RecordCongestionDiff(
+                                 int64_t baseline_ns,
+                                 int64_t real_ns,
+                                 int64_t ack_ns,
+                                 int64_t data_ns)
+{
+    if (baseline_ns <= 0 || real_ns <= 0)
+        return;
+
+    double ratio = double(data_ns) / baseline_ns;
+
+    CongestionLevel level;
+    if (ratio < 2.0)
+        level = C2;
+    else if (ratio < 4.0)
+        level = C4;
+    else if (ratio < 6.0)
+        level = C6;
+    else if (ratio < 8.0)
+        level = C8;
+    else
+        level = C10;
+
+    auto &stat = cong_diff_table[level];
+    stat.sample_cnt++;
+
+  stat.ack_diff_sum  += std::llabs(ack_ns  - real_ns);
+stat.data_diff_sum += std::llabs(data_ns - real_ns);
+////std::cout << "level: " << level << " real_ns: " << real_ns << " ack_ns: " << ack_ns << " data_ns: " << data_ns << " ack_diff: " << stat.ack_diff_sum << " data_diff: " << stat.data_diff_sum << std::endl;
+}
+
+void DumpCongestionDiffStats(const std::string &basePath)
+{
+    std::string file_name = basePath + "congestion_diff.txt";
+    FILE *file = fopen(file_name.c_str(), "w");
+    if (file == nullptr)
+    {
+        perror("Error opening congestion diff file");
+        return;
+    }
+
+    // 每一行：congestion_level sample_cnt avg_ack_abs_diff(ns) avg_data_abs_diff(ns)
+    for (const auto &kv : cong_diff_table)
+    {
+        CongestionLevel level = kv.first;
+        const CongDiffStats &stat = kv.second;
+
+        if (stat.sample_cnt == 0)
+            continue;
+
+        double ack_avg  = double(stat.ack_diff_sum)  / stat.sample_cnt;
+        double data_avg = double(stat.data_diff_sum) / stat.sample_cnt;
+
+        fprintf(file, "%d %lu %.3f %.3f\n",
+                static_cast<int>(level),
+                stat.sample_cnt,
+                ack_avg,
+                data_avg);
+    }
+
+    fflush(file);
+    fclose(file);
+}
+
+//=====拥塞度维度,拥塞度越大，实验测量误差越大-=========================
+//=====记录最大权重分布在0.5-0.9的有多少-=========================
+
+//=====记录最大权重分布在0.5-0.9的有多少-=========================
+    // 样本数：
+    uint64_t sample_cnt = 0;
+
+    RelErrorStats()
+    {
+        ack_bins.resize(BIN_NUM, 0);
+        e2e_bins.resize(BIN_NUM, 0);
+    }
+
+    inline void Record(int64_t real_ns,
+                       int64_t ack_ns,
+                       int64_t data_ns)
+    {
+        if (real_ns <= 0)
+            return;
+
+        // ACK 相对误差
+        int64_t diff_ack = ack_ns - real_ns;
+        int32_t rel_ack = static_cast<int32_t>(
+            (diff_ack * SCALE) / real_ns + 0.5
+        );
+
+        if (rel_ack < MIN_VAL) rel_ack = MIN_VAL;
+        if (rel_ack > MAX_VAL) rel_ack = MAX_VAL;
+
+        ack_bins[rel_ack - MIN_VAL]++;
+
+        // e2e 相对误差
+        int64_t diff_e2e = data_ns - real_ns;
+        int32_t rel_e2e = static_cast<int32_t>(
+            (diff_e2e * SCALE) / real_ns + 0.5
+        );
+
+        if (rel_e2e < MIN_VAL) rel_e2e = MIN_VAL;
+        if (rel_e2e > MAX_VAL) rel_e2e = MAX_VAL;
+
+        e2e_bins[rel_e2e - MIN_VAL]++;
+
+        sample_cnt++;
+    }
+
+    void Dump(const std::string &basePath) const
+{
+    std::string file_name = basePath + "relative_error.txt";
+    FILE *file = fopen(file_name.c_str(), "w");
+    if (file == nullptr)
+    {
+        perror("Error opening relative error file");
+        return;
+    }
+
+    // 第一行：追踪到的 ACK 样本总数
+    fprintf(file, "%lu\n", sample_cnt);
+
+    // 每一行：相对误差(%) ACK_count E2E_count
+    for (uint32_t i = 0; i < BIN_NUM; ++i)
+    {
+        int32_t rel = MIN_VAL + i;
+        fprintf(file, "%.1f %lu %lu\n",
+                rel / 10.0,
+                ack_bins[i],
+                e2e_bins[i]);
+    }
+
+    fflush(file);
+    fclose(file);
+}
+
+};
+//================================================================================
+
+
+
 
   class RdmaSmartFlowRouting : public Object
   {
@@ -252,8 +489,11 @@ namespace ns3
 		// 路径BDP管理相关
 		std::map<uint32_t, PathBdpInfo> m_pathBdpMap; // PID到BDP信息的映射
  uint32_t IsBDPAllFull(Ipv4Address srcServerAddr,Ipv4Address dstServerAddr);
-//===========================================================新增部分====================================
 
+
+static RelErrorStats s_relErrorStats;
+//===========================================================新增部分====================================
+   static std::map<uint32_t, Ptr<Node>> nodeIdToNodeMap;
 
   private:
     // callback

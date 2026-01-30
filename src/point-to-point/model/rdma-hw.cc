@@ -17,6 +17,7 @@
 #include "ns3/callback.h"
 #include <set>
 #include <time.h>
+#include <ns3/switch-node.h>
 namespace ns3
 {
 	// bool RdmaHw::isIrnEnabled = false;
@@ -1995,6 +1996,7 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 			PathData * pitEntry = m_E2ErdmaSmartFlowRouting->lookup_PIT(f_pid);
 			NS_ASSERT_MSG(pitEntry != NULL, "Invalid path id");
 			pitEntry->latency = delayInNs;
+			//std::cout << "更新后的时延"<< " Latency " << delayInNs << " ns" << std::endl;
 			pitEntry->tsGeneration = Simulator::Now();
 
 			//====================时延更新，重置================================================
@@ -2126,21 +2128,61 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 				NS_ASSERT_MSG(IsHaveACKPathTag, "Path tag should be attached on ACK packet");
 
 				//看看是否为数据包ACK
-				/*Ipv4SmartFlowProbeTag probeTag;
+				Ipv4SmartFlowProbeTag probeTag;
 				bool findProPacket = p->PeekPacketTag(probeTag);
 				if (findProPacket) {
-					std::cout << std::endl << "探测包 ";
-					std::cout << "ACK到达终点." << "   数据包到达终点所用时间:" << acktag.GetDelay() << "    ACK带回来的估计时延（还没计算本地出端口长度）：" << ack_caculated_delay << std::endl;
+					//std::cout << std::endl << "探测包 ";
+					//std::cout << "ACK到达终点." << "   数据包到达终点所用时间:" << acktag.GetDelay() << "    ACK带回来的估计时延（还没计算本地出端口长度）：" << ack_caculated_delay << std::endl;
 
 				}
 				else
-					std::cout << 0;*/
+					{//是数据包ACK
+					
+                     uint32_t pathid= acktag.GetPathId();
+                     PathData *pitentry= m_E2ErdmaSmartFlowRouting->lookup_PIT(pathid);
+					 uint32_t baseline_delay=pitentry->portSequence.size()*(1000+84);
+					 uint32_t realdelay= baseline_delay;
+					
+					uint32_t sum_queue_delay=0;
+					 for(int i=1;i<pitentry->portSequence.size();i++){
+                          Ptr<Node> Node=RdmaSmartFlowRouting::nodeIdToNodeMap[pitentry->nodeIdSequence[i]];
+						  Ptr<SwitchNode> swNode = DynamicCast<SwitchNode>(Node);
+						   uint32_t queue_length_bytes=0;
+						   for (int prio = 0; prio < 8; prio++) {
+                                  queue_length_bytes += swNode->m_mmu->egress_bytes[pitentry->portSequence[i]][prio];
+                             }
+				//std::cout << "  数据比特总量：" << sum_pkt << std::endl << std::endl << std::endl;
+				//得到出端口的链路速率
+				uint64_t current_port_rate = swNode->m_outPort2BitRateMap[pitentry->portSequence[i]];
+				uint64_t total_bits = queue_length_bytes * 8;
+				//  计算时延（纳秒）
+				uint64_t queuing_delay_ns = (current_port_rate > 0)
+					? (total_bits * 1000000000ULL) / current_port_rate
+					: 0; // 防止除零
+
+                      sum_queue_delay+=queuing_delay_ns;
+					 }
+					 realdelay+=sum_queue_delay;
+
+					 //================ACK里放的是数据包测量的时延===============================
+					int64_t data_caculated_delay=acktag.GetDelay();
+                    
+                    uint32_t path_hop=pitentry->portSequence.size();
+					 RdmaSmartFlowRouting::s_relErrorStats.Record(realdelay,ack_caculated_delay, data_caculated_delay);
+					 RdmaSmartFlowRouting::s_relErrorStats.RecordHopDiff(path_hop,realdelay,ack_caculated_delay,data_caculated_delay);
+					  RdmaSmartFlowRouting::s_relErrorStats.RecordCongestionDiff(baseline_delay,realdelay,ack_caculated_delay, data_caculated_delay);
+					 
+					 //std::cout<<"真实时延："<<realdelay;
+
+                    // std::cout << "，ACK到达终点." << "   数据包到达终点所用时间:" << acktag.GetDelay() << "    ACK带回来的估计时延（还没计算本地出端口长度）：" << ack_caculated_delay << std::endl;
+					}
 
 				//这里就是替换ACK中AckPathTag的时延，之后对时延的操作就可以复用了
 				acktag.SetDelay(ack_caculated_delay);
 				p->ReplacePacketTag(acktag);
 
 			}
+			
 
 		}
 			//-------------------------------------------------------改动部分结束---------------------------------------------------------
