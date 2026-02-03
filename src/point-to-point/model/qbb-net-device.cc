@@ -1140,6 +1140,17 @@ namespace ns3 {
 				// packet->RemoveHeader(h);
 				uint32_t qIndex = m_queue->GetLastQueue();
 				DynamicCast<SwitchNode>(m_node)->SwitchNotifyDequeue(m_ifIndex, qIndex, p);
+			//================================================================================================================================	
+				
+				if(DynamicCast<SwitchNode>(m_node)->m_mmu->m_SmartFlowRouting->record_each_port_send_data[m_ifIndex].send_data_byte==0){
+					//=================如果数据量为0，则记录开始时间,以及端口带宽===============================
+					DynamicCast<SwitchNode>(m_node)->m_mmu->m_SmartFlowRouting->record_each_port_send_data[m_ifIndex].time=Simulator::Now().GetNanoSeconds();
+					DynamicCast<SwitchNode>(m_node)->m_mmu->m_SmartFlowRouting->record_each_port_send_data[m_ifIndex].port_rate = DynamicCast<SwitchNode>(m_node)->m_outPort2BitRateMap[m_ifIndex];
+				}
+				//对应端口记录发送数据量
+				DynamicCast<SwitchNode>(m_node)->m_mmu->m_SmartFlowRouting->record_each_port_send_data[m_ifIndex].send_data_byte+=p->GetSize();
+               //std::cout<<"SwitchNode "<<m_node->GetId()<<" send data "<<p->GetSize()<<" byte,from port "<<m_ifIndex<<"  "<< DynamicCast<SwitchNode>(m_node)->m_outPort2BitRateMap[m_ifIndex]<<std::endl;
+                //=============================================================================================================================
 				CustomHeader ch(CustomHeader::L2_Header | CustomHeader::L3_Header | CustomHeader::L4_Header);
 				ch.getInt = 1; // parse INT header
 				p->PeekHeader(ch);
@@ -1195,35 +1206,34 @@ namespace ns3 {
 			
 		//===========实时时延大于基准时延，并且更新时间比较新，所有候选路径都这样，不发送=====================================	
 		
-			if (RdmaSmartFlowRouting::enable_laps_plus&&qpFlowIndex !=int(QINDEX_OF_ACK_PACKET_IN_SERVER)){
-				Ptr<RdmaSmartFlowRouting> m_routing = m_rdmaGetE2ELapsLBouting();
-				Ptr<RdmaQueuePair> qp = m_rdmaEQ->GetQp(qpFlowIndex);
-				Ipv4Address srcServerAddr = Ipv4Address(qp->sip);
-                 Ipv4Address dstServerAddr = Ipv4Address(qp->dip);
-				 uint32_t srcHostId = m_routing->lookup_SMT(srcServerAddr)->hostId;
-                 uint32_t dstHostId = m_routing->lookup_SMT(dstServerAddr)->hostId;
-                 HostId2PathSeleKey pstKey(srcHostId, dstHostId);
-                 pstEntryData *pstEntry = m_routing->lookup_PST(pstKey);
-                 uint32_t counts = 0;
-                std::vector<PathData *> pitEntries =m_routing->batch_lookup_PIT(pstEntry->paths);
-        for (uint32_t i = 0; i < pitEntries.size(); i++)
-        {
+		// 	if (RdmaSmartFlowRouting::enable_laps_plus&&qpFlowIndex !=int(QINDEX_OF_ACK_PACKET_IN_SERVER)){
+		// 		Ptr<RdmaSmartFlowRouting> m_routing = m_rdmaGetE2ELapsLBouting();
+		// 		Ptr<RdmaQueuePair> qp = m_rdmaEQ->GetQp(qpFlowIndex);
+		// 		Ipv4Address srcServerAddr = Ipv4Address(qp->sip);
+        //          Ipv4Address dstServerAddr = Ipv4Address(qp->dip);
+		// 		 uint32_t srcHostId = m_routing->lookup_SMT(srcServerAddr)->hostId;
+        //          uint32_t dstHostId = m_routing->lookup_SMT(dstServerAddr)->hostId;
+        //          HostId2PathSeleKey pstKey(srcHostId, dstHostId);
+        //          pstEntryData *pstEntry = m_routing->lookup_PST(pstKey);
+        //          uint32_t counts = 0;
+        //         std::vector<PathData *> pitEntries =m_routing->batch_lookup_PIT(pstEntry->paths);
+        // for (uint32_t i = 0; i < pitEntries.size(); i++)
+        // {
             
-               if ((pitEntries[i]->latency > pitEntries[i]->theoreticalSmallestLatencyInNs*1.1)
-                && ((Simulator::Now().GetNanoSeconds()-pitEntries[i]->tsGeneration.GetNanoSeconds())
-				 < pitEntries[i]->theoreticalSmallestLatencyInNs) ){
-					counts++;
-				 }
+        //        if ((pitEntries[i]->latency > pitEntries[i]->theoreticalSmallestLatencyInNs*1.2) ){
+		// 			counts++;
+		// 		 }
                 
-        }
-		if(counts>=pitEntries.size()){
-			//std::cout<<"实时时延大于基准实验，并且更新时间比较新，所有候选路径都这样，不发送"<<std::endl;
-			m_rdmaLbPktSent(qp, 1000, m_tInterframeGap);
-			DequeueAndTransmitOnSrcHostForLAPS();
-			return ;
-		}
+        // }
+		// if(counts>=pitEntries.size()){
+		// 	//std::cout<<"实时时延大于基准实验，并且更新时间比较新，所有候选路径都这样，不发送"<<std::endl;
+		// 	m_rdmaLbPktSent(qp, 100, m_tInterframeGap);
+		// 	DequeueAndTransmitOnSrcHostForLAPS();
+		// 	RdmaSmartFlowRouting::s_relErrorStats.rejected_cnt++;
+		// 	return ;
+		// }
                 
-		}
+		// }
 
 		//=============================================
 

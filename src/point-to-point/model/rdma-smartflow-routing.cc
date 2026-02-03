@@ -23,16 +23,22 @@
 #include <ns3/ipv4-header.h>
 #include "ns3/ppp-header.h"
 #include "ns3/flow-id-tag.h"
+#include <ns3/rdma-driver.h>
 namespace ns3
 {
 
 //--------------------------------初始化laps_plus_________________________________--------------------------------------------------
     bool RdmaSmartFlowRouting::enable_laps_plus = false;
     std::map<uint32_t, Ptr<Node>> RdmaSmartFlowRouting::nodeIdToNodeMap;
-    
+    std::map<HostId2PathSeleKey, std::map<uint32_t,std::vector<record_utilization_rate>>>RdmaSmartFlowRouting::record_path_utilization_rate;
+    std::map<uint32_t, std::map<uint32_t, std::vector<record_utilization_rate>>> RdmaSmartFlowRouting::record_all_port_utilization_rate;
+    std::map<HostId2PathSeleKey,e2e_all_flow_dur >RdmaSmartFlowRouting::record_path_e2e_all_flow_dur;
+    std::map<HostId2PathSeleKey,uint32_t> RdmaSmartFlowRouting::record_path_flow_num;
+    std::vector<std::pair<HostId2PathSeleKey, uint32_t>> RdmaSmartFlowRouting:: sorted_path_flow_counts;
      RelErrorStats RdmaSmartFlowRouting::s_relErrorStats;
 
-   uint32_t RdmaSmartFlowRouting::choose_softmax=0;
+   uint32_t RdmaSmartFlowRouting::choose_softmax=0; 
+   uint64_t RdmaSmartFlowRouting::record_time=0;
   uint64_t RdmaSmartFlowRouting::sum_data_receive=0;
     uint64_t RdmaSmartFlowRouting::sum_data=0;
     uint64_t RdmaSmartFlowRouting::key=0;
@@ -1825,7 +1831,7 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
      }
       // 如果是第一个10KB数据，则找出延迟最小的路径并将其权重设为1，其他路径权重设为0
       //if(RdmaSmartFlowRouting::choose_softmax==2)
-      if(true)
+      if(false)
       {
         if (is_first_10KB) {
         // 找到延迟最小的路径索引
@@ -1857,6 +1863,7 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
     
 
      bool is_have_good_path=false;
+     double max_weight=0.0;
   //===========================================================修改部分=====================================
        //std::cout<<"=========================================================="<<std::endl;
   for (size_t i = 0; i < weights.size(); i++)
@@ -1870,19 +1877,19 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
                 multiplier = laps_alpha;
                 break;
             case 1:
-                multiplier = 10.0;
+                multiplier = 5.0;
                 break;
             case 2:
-                multiplier = 10.0;
+                multiplier = 5.0;
                 break;
             case 3:
-                multiplier = 10.0;
+                multiplier = 5.0;
                 break;
             case 4:
-                multiplier = 10.0;
+                multiplier = 5.0;
                 break;
              case 5:
-                multiplier = 10.0;
+                multiplier = 5.0;
                 break;
             default:
                 // 可选：处理非法 choose_softmax 值，例如设为默认 multiplier 或跳过
@@ -1903,13 +1910,15 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
 
             if (enable_laps_plus)
             { 
-                double ratio = -1.0 * (paths[i]->latency+84*paths[i]->sent_pkt_num )/ maxBastDelay * multiplier;
+            double ratio = -1.0 * (paths[i]->latency+84*paths[i]->sent_pkt_num )/ maxBastDelay * multiplier;
+
+             //   double ratio = -1.0 * (paths[i]->latency+paths[i]->d_t*(Simulator::Now().GetNanoSeconds() - paths[i]->tsGeneration.GetNanoSeconds()) )/ maxBastDelay * multiplier;
             //std::cout<<"pid "<<paths[i]->pid<<",paths["<<i<<"]->latency " << paths[i]->latency << ", paths["<<i<<"]->sent_pkt_num " << paths[i]->sent_pkt_num<<",sum"<< paths[i]->latency+84*paths[i]->sent_pkt_num <<std::endl;
            
            
            
-            //weights[i] = std::exp(ratio);
-            weights[i] = std::pow(2.0, ratio);
+            weights[i] = std::exp(ratio);
+            //weights[i] = std::pow(2.0, ratio);
 
 
                 //    if ((paths[i]->latency < paths[i]->theoreticalSmallestLatencyInNs)
@@ -1947,6 +1956,10 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
     for (size_t i = 0; i < weights.size(); i++)
     {          
         weights[i] /= sum_weights;
+        if( weights[i]>max_weight){
+            max_weight=weights[i];
+
+        }
         if(weights[i]>0.9)
         {
             is_have_good_path=true;
@@ -1959,21 +1972,24 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
      
 
     }
-    if(is_have_good_path)
-    {
-        std::cout<<"=========================================================="<<std::endl;
-          for (size_t i = 0; i < weights.size(); i++)
-    {          
-        std::cout<<"Path: " << paths[i]->pid << ", " <<
-                    "Realtime Delay: " << paths[i]->latency << ", " <<
-                    "Mininal Delay: " << paths[i]->theoreticalSmallestLatencyInNs << ", " <<
-                    "Weight: " << weights[i]<<std::endl;
-                   
-     
-
-    }
+    // if(is_have_good_path)
+    // {
+    //     std::cout<<"=========================================================="<<std::endl;
+    //       for (size_t i = 0; i < weights.size(); i++)
+    // {          
+    //     std::cout<<"Path: " << paths[i]->pid << ", " <<
+    //                 "Realtime Delay: " << paths[i]->latency << ", " <<
+    //                 "Mininal Delay: " << paths[i]->theoreticalSmallestLatencyInNs << ", " <<
+    //                 "Weight: " << weights[i]<<std::endl;
+    // }
       
-    }
+    // }
+    //===================================测量各部分最大权重占的比例==========================================
+         if(max_weight>0.99){
+            RdmaSmartFlowRouting::s_relErrorStats.RecordHighestWeightCount(99); 
+         }else{
+            RdmaSmartFlowRouting::s_relErrorStats.RecordHighestWeightCount((int)(max_weight*10)*10);
+         }
 
     return weights;
 }
@@ -2107,7 +2123,26 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
         uint32_t fPid = pitEntries[selPathIndex]->pid;
         add_path_tag_by_path_id(entry->dataPacket, fPid);
 
-        //==================================增 加 B D P======================================================================
+//====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
+            uint32_t port_id = pitEntries[selPathIndex]->portSequence[0];
+           // std::cout<<1<<std::endl;
+            if(record_each_port_send_data[port_id].send_data_byte==0){
+                record_each_port_send_data[port_id].time=Simulator::Now().GetNanoSeconds();
+                  Ptr<RdmaDriver> rdma = m_node->GetObject<RdmaDriver>();
+                  if(rdma==NULL){
+                    std::cout<<"NULL"<<std::endl;
+                  }
+                record_each_port_send_data[port_id].port_rate = rdma->m_rdma->m_nic[port_id].dev->GetDataRate().GetBitRate();
+                  
+                
+
+            }
+           record_each_port_send_data[port_id].send_data_byte+=p->GetSize();
+          // std::cout <<"端口"<<port_id<< " 发送数据包" <<record_each_port_send_data[port_id].send_data_byte<<std::endl;
+    //====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
+        
+        
+           //==================================增 加 B D P======================================================================
            if (RdmaSmartFlowRouting::enable_laps_plus&&m_pathBdpMap.find(fPid) != m_pathBdpMap.end()) {
             m_pathBdpMap[fPid].currentBdp += p->GetSize();
             //std::cout << "当前BDP: " << m_pathBdpMap[fPid].currentBdp << "MAXBDP: " << m_pathBdpMap[fPid].maxBdp <<"，数据包大小"<< p->GetSize()<< std::endl;
@@ -2199,6 +2234,8 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
         {
             NS_ASSERT_MSG(false, "The mode is invalid");
         }
+          
+
         NS_ASSERT_MSG(selPathIndex < pitEntries.size(), "The selected path index is out of range");
         // uint32_t fPid = pitEntries[selPathIndex]->pid;
         auto it_rPatPid = pathPair.find(ackTag.GetPathId());
@@ -2225,6 +2262,25 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
         // }
             entry->isProbe = false;
             entry->probePacket = NULL;
+            //====================================增加对应端口的ACK包记录，用来记录实际端口利用率==========
+             PathData *pitEntry =lookup_PIT(fPid);
+            uint32_t port_id = pitEntry->portSequence[0];
+           // std::cout<<1<<std::endl;
+            if(record_each_port_send_data[port_id].send_data_byte==0){
+                record_each_port_send_data[port_id].time=Simulator::Now().GetNanoSeconds();
+                  Ptr<RdmaDriver> rdma = m_node->GetObject<RdmaDriver>();
+                  if(rdma==NULL){
+                    std::cout<<"NULL"<<std::endl;
+                  }
+                record_each_port_send_data[port_id].port_rate = rdma->m_rdma->m_nic[port_id].dev->GetDataRate().GetBitRate();
+                  
+                
+
+            }
+           record_each_port_send_data[port_id].send_data_byte+=p->GetSize();
+           //std::cout <<"端口"<<port_id<< " 发送数据包" <<p->GetSize()<<std::endl;
+    //====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
+        
         // // piggybacking
         // HostId2PathSeleKey reversePstKey(dstHostId, srcHostId);
         // pstEntryData *reversePstEntry = lookup_PST(reversePstKey);

@@ -18,6 +18,7 @@
 #include <set>
 #include <time.h>
 #include <ns3/switch-node.h>
+#include <ns3/rdma-driver.h>
 namespace ns3
 {
 	// bool RdmaHw::isIrnEnabled = false;
@@ -615,6 +616,7 @@ namespace ns3
 		NS_ASSERT_MSG(flowId >= 0, "Flow ID should be non-negative");
 		NS_ASSERT_MSG(m_cc_mode == CongestionControlMode::CC_LAPS, "Called only when LAPS is enabled");
 		NS_ASSERT_MSG(Irn::mode == Irn::Mode::IRN_OPT || Irn::mode == Irn::Mode::NACK, "Called only when LAPS is enabled");
+     
 
 		Ptr<RdmaQueuePair> qp = CreateObject<RdmaQueuePair>(pg, sip, dip, sport, dport);
 		qp->SetSize(size);
@@ -682,6 +684,15 @@ namespace ns3
 		uint32_t srcHostId = m_E2ErdmaSmartFlowRouting->lookup_SMT(srcServerAddr)->hostId;
 		uint32_t dstHostId = m_E2ErdmaSmartFlowRouting->lookup_SMT(dstServerAddr)->hostId;
 		HostId2PathSeleKey pstKey(srcHostId, dstHostId);
+				//===============================记录两点所有流最早开始时间和最晚结束时间=========
+
+		if(RdmaSmartFlowRouting::record_path_e2e_all_flow_dur.find(pstKey) == RdmaSmartFlowRouting::record_path_e2e_all_flow_dur.end()){
+			RdmaSmartFlowRouting::record_path_e2e_all_flow_dur[pstKey].starttime = Simulator::Now().GetNanoSeconds();
+		
+	}
+		
+        
+		//===================================================================
 		pstEntryData *pstEntry = m_E2ErdmaSmartFlowRouting->lookup_PST(pstKey);
 		flowToPstEntry[flowId] = pstEntry;
 		std::vector<PathData *> pitEntries = m_E2ErdmaSmartFlowRouting->batch_lookup_PIT(pstEntry->paths);
@@ -695,9 +706,7 @@ namespace ns3
 
 	 //=================================================================*0.85看看·========================
 		qp->laps.m_tgtDelayInNs = (pitEntries[0]->theoreticalSmallestLatencyInNs);
-
-
-
+       
 
 		qp->SetBaseRtt(qp->laps.m_tgtDelayInNs * 2);
 
@@ -1995,12 +2004,15 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 			uint64_t delayInNs = ackTag.GetDelay();
 			PathData * pitEntry = m_E2ErdmaSmartFlowRouting->lookup_PIT(f_pid);
 			NS_ASSERT_MSG(pitEntry != NULL, "Invalid path id");
+//====================时延更新，重置================================================
+			pitEntry->sent_pkt_num=0;
+			pitEntry->d_t=(double)(delayInNs - pitEntry->latency)/(Simulator::Now().GetNanoSeconds()-pitEntry->tsGeneration.GetNanoSeconds());
+
 			pitEntry->latency = delayInNs;
 			//std::cout << "更新后的时延"<< " Latency " << delayInNs << " ns" << std::endl;
 			pitEntry->tsGeneration = Simulator::Now();
 
-			//====================时延更新，重置================================================
-			pitEntry->sent_pkt_num=0;
+			
 			//std::cout << "收到数据包ACK时延更新，重置" << std::endl;
   
 			// if (pitEntry->latency <= pitEntry->theoreticalSmallestLatencyInNs)
@@ -2077,7 +2089,9 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 			NS_ASSERT_MSG(pitEntry != NULL, "Invalid path id");
 			// std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Node " << m_node->GetId() << " Receive Probe ACK Packet for path " << f_pid << std::endl;
 			//  pitEntry->print();
+			pitEntry->d_t=(double)(delayInNs - pitEntry->latency)/(Simulator::Now().GetNanoSeconds()-pitEntry->tsGeneration.GetNanoSeconds());
 			pitEntry->latency = delayInNs;
+
 			pitEntry->tsGeneration = Simulator::Now();
 
 			//====================时延更新，重置================================================
@@ -2168,6 +2182,7 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 					int64_t data_caculated_delay=acktag.GetDelay();
                     
                     uint32_t path_hop=pitentry->portSequence.size();
+					//记录时延的两种测量方式的误差
 					 RdmaSmartFlowRouting::s_relErrorStats.Record(realdelay,ack_caculated_delay, data_caculated_delay);
 					 RdmaSmartFlowRouting::s_relErrorStats.RecordHopDiff(path_hop,realdelay,ack_caculated_delay,data_caculated_delay);
 					  RdmaSmartFlowRouting::s_relErrorStats.RecordCongestionDiff(baseline_delay,realdelay,ack_caculated_delay, data_caculated_delay);
@@ -2181,6 +2196,116 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 				acktag.SetDelay(ack_caculated_delay);
 				p->ReplacePacketTag(acktag);
 
+              //=============================更新各端口带宽利用率============================================
+                  //==============每10us统计一次============
+			  if(Simulator::Now().GetNanoSeconds()-RdmaSmartFlowRouting::record_time>50000){
+				RdmaSmartFlowRouting::record_time=Simulator::Now().GetNanoSeconds();
+				for (const auto& pair : RdmaSmartFlowRouting::nodeIdToNodeMap) 
+                   {
+                    uint32_t nodeId = pair.first;
+                     Ptr<Node> node = pair.second;
+					 if(node->GetNodeType() == 0){
+						//服务器部分处理逻辑
+                        //node->m_E2ErdmaSmartFlowRouting->record_each_port_send_data
+                       
+
+						//continue;
+					  }
+                      Ptr<SwitchNode> swNode = DynamicCast<SwitchNode>(node);
+					   Ptr<RdmaDriver> rdma = node->GetObject<RdmaDriver>();
+                           //========================================================注意，为了使用Ptr<RdmaDriver> rdma =============
+                           //========================================================我在rdmahw里面调用了头文件RdmaDriver，已经造成了循环调用===========
+						   //========================================================不过可以正常编译就暂时不管了
+
+
+                   for ( auto& pair_1 : node->GetNodeType() == 0? rdma->m_rdma->m_E2ErdmaSmartFlowRouting->record_each_port_send_data:swNode->m_mmu->m_SmartFlowRouting->record_each_port_send_data) 
+                   {//std::cout<<1<<std::endl;
+					uint32_t portId = pair_1.first;
+					//对应端口没有数据记录
+                    // if(pair_1.second.send_data_byte==0){
+					// 	continue;
+					// }
+					//std::cout<<2<<std::endl;
+					record_utilization_rate port_utilization_rate;
+					port_utilization_rate.time=Simulator::Now().GetNanoSeconds();
+					//获取经过时间
+					uint64_t duration_time=Simulator::Now().GetNanoSeconds()-pair_1.second.time;
+					//计算利用率
+					//std::cout<<3<<std::endl;
+					 double utilization;
+					if(pair_1.second.port_rate==-1){
+						utilization=0;
+					}else{
+						utilization=(double)(pair_1.second.send_data_byte*8*1000000000)/duration_time/pair_1.second.port_rate;
+					}
+
+                     
+
+					port_utilization_rate.utilization_rate= utilization;
+
+					RdmaSmartFlowRouting::record_all_port_utilization_rate[nodeId][portId].push_back(port_utilization_rate);
+                    
+					if(nodeId==1&&portId==1){
+						//std::cout<<"时间 "<<Simulator::Now().GetNanoSeconds()<<"，节点 "<<nodeId<<"，端口 "<<portId<<"，利用率 "<<utilization<<std::endl;
+					
+					}
+					
+					//端口记录重置数据
+					// std::cout<<4<<std::endl;
+					pair_1.second.send_data_byte=0;
+					pair_1.second.time=Simulator::Now().GetNanoSeconds();    
+                   
+				   }	//std::cout<<"时间 "<<Simulator::Now().GetNanoSeconds()<<"，节点 "<<nodeId<<std::endl;
+					
+                  }
+				   
+                  //================================更新路径利用率============================
+				  //取最多流的节点对
+				  HostId2PathSeleKey pstKey=RdmaSmartFlowRouting::sorted_path_flow_counts[0].first;
+				  uint32_t srcHostId=pstKey.selfHostId;
+				  uint32_t dstHostId=pstKey.dstHostId;
+				  //可以用循环记录多个节点之间的路径的利用率
+		
+				Ptr<Node> srcnode =RdmaSmartFlowRouting::nodeIdToNodeMap[srcHostId];
+			
+				 Ptr<RdmaDriver> rdma = srcnode->GetObject<RdmaDriver>();
+                pstEntryData *pstEntry =rdma->m_rdma->m_E2ErdmaSmartFlowRouting-> lookup_PST(pstKey);
+               std::vector<PathData *> pitEntries = rdma->m_rdma->m_E2ErdmaSmartFlowRouting->batch_lookup_PIT(pstEntry->paths);
+        
+			   for (auto &pitEntry : pitEntries) { 
+                    double utilization=0.0;
+					for (uint32_t i = 0; i < pitEntry->portSequence.size(); i++) { 
+						uint32_t portId = pitEntry->portSequence[i];
+						u_int32_t nodeId = pitEntry->nodeIdSequence[i];
+							// 检查容器是否为空，避免访问空容器的back()
+						if (!RdmaSmartFlowRouting::record_all_port_utilization_rate[nodeId][portId].empty()) {
+							record_utilization_rate now_port = RdmaSmartFlowRouting::record_all_port_utilization_rate[nodeId][portId].back();
+							if (now_port.utilization_rate > utilization) {
+								utilization = now_port.utilization_rate;
+							}
+						} else {
+							// 如果容器为空，可以设置默认值或跳过处理
+							NS_LOG_WARN("Warning: record_all_port_utilization_rate is empty for nodeId " << nodeId << " portId " << portId);
+							// 可以选择设置默认利用率值为0或其他合适的默认值
+						}
+					}
+				
+					record_utilization_rate path_utilization_rate;
+					path_utilization_rate.time=Simulator::Now().GetNanoSeconds();
+					path_utilization_rate.utilization_rate=utilization;
+			
+					RdmaSmartFlowRouting::record_path_utilization_rate[pstKey][pitEntry->pid].push_back(path_utilization_rate);
+					if(utilization>1.01)
+               std::cout<<"时间 "<<Simulator::Now().GetNanoSeconds()<<"，路径 "<<pitEntry->pid<<"，利用率 "<<utilization<<std::endl;
+				}
+
+
+
+
+			  }
+				 
+
+              //=============================更新各端口带宽利用率============================================
 			}
 			
 
@@ -2953,7 +3078,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 	{
 		Time sendingTime;
 		// std::cout << "Seconds(qp->m_rate.CalculateTxTime(pkt_size)): " << Seconds(qp->m_rate.CalculateTxTime(pkt_size)) <<"，初始化速率："<<qp->m_rate <<std::endl;
-		 if (m_cc_mode == CongestionControlMode::CC_LAPS)
+		 if (m_cc_mode == CongestionControlMode::CC_LAPS&&RdmaSmartFlowRouting::enable_laps_plus)
          {
         // LAPS 特定的发送时间计算逻辑
         // 在LAPS模式下，使用laps.m_curRate而不是m_rate
@@ -3078,7 +3203,9 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 			}
 			q->TraceRate(std::max(m_minRate, q->m_rate * (1 - q->mlx.m_alpha / 2)));
 			q->m_rate = std::max(m_minRate, q->m_rate * (1 - q->mlx.m_alpha / 2));
-
+            insertRateRecord(q->m_flow_id, q->m_rate.GetBitRate()/1000000/8);
+            //std::cout << "RdmaHw::CheckRateDecreaseMlx: " << Simulator::Now().GetNanoSeconds() <<  std::endl;
+			
 			// reset rate increase related things
 			q->mlx.m_rpTimeStage = 0;
 			q->mlx.m_decrease_cnp_arrived = false;
@@ -3124,6 +3251,8 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 #endif
 		q->TraceRate((q->m_rate / 2) + (q->mlx.m_targetRate / 2));
 		q->m_rate = (q->m_rate / 2) + (q->mlx.m_targetRate / 2);
+		insertRateRecord(q->m_flow_id, q->m_rate.GetBitRate()/1000000/8);
+		//std::cout << "RdmaHw::FastRecoveryMlx: " << Simulator::Now().GetNanoSeconds() << "   "<<q->m_flow_id<< std::endl;
 #if PRINT_LOG
 		printf("(%.3lf %.3lf)\n", q->mlx.m_targetRate.GetBitRate() * 1e-9, q->m_rate.GetBitRate() * 1e-9);
 #endif
@@ -3142,6 +3271,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 			q->mlx.m_targetRate = dev->GetDataRate();
 		q->TraceRate((q->m_rate / 2) + (q->mlx.m_targetRate / 2));
 		q->m_rate = (q->m_rate / 2) + (q->mlx.m_targetRate / 2);
+		insertRateRecord(q->m_flow_id, q->m_rate.GetBitRate()/1000000/8);
 #if PRINT_LOG
 		printf("(%.3lf %.3lf)\n", q->mlx.m_targetRate.GetBitRate() * 1e-9, q->m_rate.GetBitRate() * 1e-9);
 #endif
@@ -3160,6 +3290,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 			q->mlx.m_targetRate = dev->GetDataRate();
 		q->TraceRate((q->m_rate / 2) + (q->mlx.m_targetRate / 2));
 		q->m_rate = (q->m_rate / 2) + (q->mlx.m_targetRate / 2);
+		insertRateRecord(q->m_flow_id, q->m_rate.GetBitRate()/1000000/8);
 #if PRINT_LOG
 		printf("(%.3lf %.3lf)\n", q->mlx.m_targetRate.GetBitRate() * 1e-9, q->m_rate.GetBitRate() * 1e-9);
 #endif
@@ -3664,6 +3795,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 #endif
 			qp->TraceRate(std::max(m_minRate, qp->m_rate * (1 - qp->dctcp.m_alpha / 2)));
 			qp->m_rate = std::max(m_minRate, qp->m_rate * (1 - qp->dctcp.m_alpha / 2));
+			insertRateRecord(qp->m_flow_id, qp->m_rate.GetBitRate()/1000000/8);
 #if PRINT_LOG
 			printf("%.3lf\n", qp->m_rate.GetBitRate() * 1e-9);
 #endif
@@ -3676,6 +3808,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 		{
 			qp->TraceRate(std::min(qp->m_max_rate, qp->m_rate + m_dctcp_rai));
 			qp->m_rate = std::min(qp->m_max_rate, qp->m_rate + m_dctcp_rai);
+			insertRateRecord(qp->m_flow_id, qp->m_rate.GetBitRate()/1000000/8);
 		}
 	}
 
@@ -3735,6 +3868,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 #endif
 			qp->TraceRate(std::max(m_minRate, qp->m_rate * (1 - qp->dctcp.m_alpha / 2)));
 			qp->m_rate = std::max(m_minRate, qp->m_rate * (1 - qp->dctcp.m_alpha / 2));
+			insertRateRecord(qp->m_flow_id, qp->m_rate.GetBitRate()/1000000/8);
 #if PRINT_LOG
 			printf("%.3lf\n", qp->m_rate.GetBitRate() * 1e-9);
 #endif
@@ -3747,6 +3881,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 		{
 			qp->TraceRate(std::min(qp->m_max_rate, qp->m_rate + m_dctcp_rai));
 			qp->m_rate = std::min(qp->m_max_rate, qp->m_rate + m_dctcp_rai);
+			insertRateRecord(qp->m_flow_id, qp->m_rate.GetBitRate()/1000000/8);
 		}
 	}
 

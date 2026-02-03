@@ -140,6 +140,7 @@ namespace ns3
   {
     static const uint32_t pCnt = 257; // Number of ports used
     static const uint32_t qCnt = 8;   // Number of queues/priorities used
+
     uint32_t m_ecmpSeed;
     unsigned int m_Seed;
     std::unordered_map<uint32_t, std::vector<int>> m_rtTable; // map from ip address (u32) to possible port (index of dev,ecmp��drill��rps)
@@ -200,6 +201,10 @@ namespace ns3
 
   public:
     Ptr<SwitchMmu> m_mmu;
+
+    
+
+
     static TypeId GetTypeId(void);
     SwitchNode();
     void SetEcmpSeed(uint32_t seed);

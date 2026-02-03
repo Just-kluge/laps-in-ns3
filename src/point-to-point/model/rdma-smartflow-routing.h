@@ -247,10 +247,43 @@ void DumpCongestionDiffStats(const std::string &basePath)
 //=====拥塞度维度,拥塞度越大，实验测量误差越大-=========================
 //=====记录最大权重分布在0.5-0.9的有多少-=========================
 
+struct highest_weight_count
+{
+    uint64_t sample_cnt = 0;
+};
+
+std::map<uint32_t,highest_weight_count> highest_weight_interval_count;
+uint32_t highest_weight_sum_count = 0;
+inline void RecordHighestWeightCount(uint32_t interval)
+    {
+
+       highest_weight_interval_count[interval].sample_cnt++;
+
+        highest_weight_sum_count++;
+    }
+
+void CoutHighestWeightPercent(void) const
+{
+  std::vector<std::pair<uint32_t, highest_weight_count>> sorted_items;
+   for(const auto &kv : highest_weight_interval_count){
+       sorted_items.push_back(kv);
+   }
+   std::sort(sorted_items.begin(), sorted_items.end(),
+             [](const std::pair<uint32_t, highest_weight_count> &a, 
+                const std::pair<uint32_t, highest_weight_count> &b) {
+                 return a.first < b.first;
+             });
+
+   for(const auto &kv : sorted_items){
+    std::cout<<"本次仿真每次喷洒时路径最大权重>"<<kv.first<<"%的概率, "<<(double)(kv.second.sample_cnt)/highest_weight_sum_count<<std::endl;
+   }
+}
+
+
 //=====记录最大权重分布在0.5-0.9的有多少-=========================
     // 样本数：
     uint64_t sample_cnt = 0;
-
+     uint64_t rejected_cnt = 0;
     RelErrorStats()
     {
         ack_bins.resize(BIN_NUM, 0);
@@ -319,9 +352,16 @@ void DumpCongestionDiffStats(const std::string &basePath)
 };
 //================================================================================
 
+struct record_utilization_rate{
+    uint32_t time=0;
+    double utilization_rate=0;
+};
 
-
-
+ struct e2e_all_flow_dur{
+     uint64_t starttime=-1;
+     //========
+      uint64_t endtime=-1;
+    };
   class RdmaSmartFlowRouting : public Object
   {
     // friend class SwitchMmu;
@@ -330,14 +370,33 @@ void DumpCongestionDiffStats(const std::string &basePath)
   public:
     RdmaSmartFlowRouting();
     virtual ~RdmaSmartFlowRouting();
+    
 
+    struct send_data{
+     uint64_t time=0;
+     //========
+     uint64_t port_rate=-1;
+      uint64_t send_data_byte=0;
+    };
+    
+       //===========================每个节点记录各个端口定期的数据发送量用来计算带宽利用率=======================
+     std::map<uint32_t, send_data> record_each_port_send_data;
+     //两节点，路径id,利用率随时间变化数组
+         static std::map<HostId2PathSeleKey, std::map<uint32_t,std::vector<record_utilization_rate>>>record_path_utilization_rate;
+         //记录两点之间所有流最早开始时间和最晚完成时间。
+         static std::map<HostId2PathSeleKey,e2e_all_flow_dur >record_path_e2e_all_flow_dur;
+
+         //记录所有节点对之间产生流的数量，降序排列
+         static std::map<HostId2PathSeleKey,uint32_t> record_path_flow_num;
+          static std::vector<std::pair<HostId2PathSeleKey, uint32_t>> sorted_path_flow_counts;
     //-------------------------------------------------------------------启动laps_plus-----------------------------------------------------
+     static std::map<uint32_t, std::map<uint32_t,std::vector<record_utilization_rate>>> record_all_port_utilization_rate;
     static bool enable_laps_plus;
     static u_int32_t choose_softmax;
      static uint64_t sum_data_receive;
     static uint64_t sum_data;
      static uint64_t key;
-
+      static uint64_t  record_time;
     static std::vector<probeInfoEntry> m_prbInfoTable;
     static std::map<std::string, reorder_entry_t> m_reorderTable;
     static double laps_alpha;

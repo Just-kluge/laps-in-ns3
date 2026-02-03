@@ -503,6 +503,19 @@ namespace ns3
   {
     // sip, dip, sport, dport, dataSize (B), trafficSize,
     // start_time, last_time, cur_time, fct (ns), standalone_fct (ns)
+
+		//========================================
+		uint32_t srcHostId = routeSettings::hostIp2IdMap[Ipv4Address(q->sip)];
+		uint32_t dstHostId = routeSettings::hostIp2IdMap[Ipv4Address(q->dip)];
+        HostId2PathSeleKey pstKey(srcHostId, dstHostId);
+		if(RdmaSmartFlowRouting::record_path_e2e_all_flow_dur.find(pstKey) != RdmaSmartFlowRouting::record_path_e2e_all_flow_dur.end()){
+			RdmaSmartFlowRouting::record_path_e2e_all_flow_dur[pstKey].endtime= Simulator::Now().GetNanoSeconds();
+      
+		}
+
+		//===================================================================
+
+
     auto srcIpAddr = q->sip;
     NS_ABORT_MSG_UNLESS(m->addr2node.find(srcIpAddr) != m->addr2node.end(), "key not save, srcIpAddr " + ipv4Address_to_string(srcIpAddr));
     /*if (m->addr2node.find(srcIpAddr) != m->addr2node.end())
@@ -1717,7 +1730,7 @@ namespace ns3
         uint64_t rateInbps = dev->GetDataRate().GetBitRate();
         minBwInbps = std::min(minBwInbps, rateInbps);
         uint32_t packet_number=1;
-        //========================允许每个端口多24个数据包的容量======================================
+        //========================允许每个端口多30个数据包的容量======================================
         if(varMap->enable_laps_plus)
         {
               packet_number=25;
@@ -2422,6 +2435,7 @@ namespace ns3
   }
   void save_QPExec_outinfo(global_variable_t *varMap)
   {
+
     NS_LOG_INFO("----------save QP exec info()----------");
     std::string file_name = varMap->outputFileDir + varMap->fileIdx + "-QpInfo.txt";
     FILE *file = fopen(file_name.c_str(), "w");
@@ -2436,8 +2450,9 @@ namespace ns3
 //RdmaSmartFlowRouting::s_relErrorStats.Dump(varMap->outputFileDir);
 // RdmaSmartFlowRouting::s_relErrorStats.DumpHopDiffStats(varMap->outputFileDir);
 //RdmaSmartFlowRouting::s_relErrorStats.DumpCongestionDiffStats(varMap->outputFileDir);
-
-
+RdmaSmartFlowRouting::s_relErrorStats.CoutHighestWeightPercent();
+std::cout << "拒绝比例:" << (double)(RdmaSmartFlowRouting::s_relErrorStats.rejected_cnt)/
+(RdmaSmartFlowRouting::s_relErrorStats.rejected_cnt + RdmaSmartFlowRouting::s_relErrorStats.sample_cnt) << std::endl;
     std::map<uint32_t, QpRecordEntry> & recordMap = RdmaHw::m_recordQpExec;
     std::vector<std::pair<uint32_t, QpRecordEntry>> recordVec(recordMap.begin(), recordMap.end());
 
@@ -2575,6 +2590,54 @@ namespace ns3
     fclose(file);
     return;
   }
+
+
+  
+void save_utilizationChange_outinfo(global_variable_t *varMap){
+    NS_LOG_INFO("----------save QpRateChange outinfo()----------");
+    std::string file_name = varMap->outputFileDir + varMap->fileIdx + "-PathUtilizationChange.txt";
+    FILE *file = fopen(file_name.c_str(), "w");
+    if (file == NULL) {
+        NS_LOG_ERROR("Cannot open file " << file_name);
+        return;
+    }
+ // 遍历 record_path_utilization_rate 中的所有路径利用率数据
+    for (const auto& pstKey_pair : RdmaSmartFlowRouting::record_path_utilization_rate) {
+        const HostId2PathSeleKey& pstKey = pstKey_pair.first;
+        const std::map<uint32_t, std::vector<record_utilization_rate>>& pathDataMap = pstKey_pair.second;
+        uint64_t starttime=RdmaSmartFlowRouting::record_path_e2e_all_flow_dur[pstKey].starttime;
+        std::cout<<"starttime:"<<starttime<<std::endl;
+        uint64_t endtime=RdmaSmartFlowRouting::record_path_e2e_all_flow_dur[pstKey].endtime;
+        std::cout<<"endtime:"<<endtime<<std::endl;
+        fprintf(file, "%u,%u,%u,%u;", pstKey.selfHostId, pstKey.dstHostId,starttime, endtime);
+        fprintf(file, "\n");
+        for (const auto& path_pair : pathDataMap) {
+            uint32_t pid = path_pair.first;  // 路径ID
+            const std::vector<record_utilization_rate>& utilizationList = path_pair.second;
+            
+            // 输出格式: srcId,dstId,pid;[time1,utilization1],[time2,utilization2]......
+            fprintf(file, "%u,%u,%u;", pstKey.selfHostId, pstKey.dstHostId, pid);
+            
+            for (size_t i = 0; i < utilizationList.size(); ++i) {
+                const record_utilization_rate& rate = utilizationList[i];
+                fprintf(file, "[%lu,%f]", rate.time, rate.utilization_rate);
+                if (i < utilizationList.size() - 1) {
+                    fprintf(file, ",");
+                }
+            }
+            fprintf(file, "\n");
+        }
+    }
+
+    fflush(file);
+    fclose(file);
+    return;
+
+
+
+}
+
+
 
   void save_flow_packetSenTimeGap(global_variable_t *varMap)
   {
@@ -4206,6 +4269,17 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
       {
         genFlow.rttInNs = varMap->pairRttInNs[genFlow.srcNode][genFlow.dstNode];
       }
+
+      //=============================================================
+      uint32_t sid=varMap->srcNode->GetId();
+      uint32_t  did=varMap->dstNode->GetId();
+      HostId2PathSeleKey pstKey(sid, did);
+     if( RdmaSmartFlowRouting::record_path_flow_num.find(pstKey) ==RdmaSmartFlowRouting::record_path_flow_num.end()) {
+      RdmaSmartFlowRouting::record_path_flow_num[pstKey] = 1;
+     }else{
+      RdmaSmartFlowRouting::record_path_flow_num[pstKey]++;
+     }
+           //=============================================================
       varMap->flowCount = varMap->flowCount + 1;
       genFlow.idx = varMap->flowCount;
       if(varMap->m_flow_cnt_per_host.find(genFlow.srcNode->GetId()) == varMap->m_flow_cnt_per_host.end())
@@ -4403,6 +4477,26 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
     update_EST(varMap->paraMap, "largeFlowCount: ", varMap->largeFlowCount);
     install_rdma_flows_on_nodes(varMap);
     NS_LOG_INFO("install_rdma_flows_on_nodes is finished");
+
+
+
+    
+    // 创建一个vector来存放map中的键值对，便于排序
+std::vector<std::pair<HostId2PathSeleKey, uint32_t>> temp_sorted_flow_counts(
+    RdmaSmartFlowRouting::record_path_flow_num.begin(),
+    RdmaSmartFlowRouting::record_path_flow_num.end()
+);
+
+// 按照second（即flow数量）进行降序排序
+std::sort(temp_sorted_flow_counts.begin(), temp_sorted_flow_counts.end(),
+    [](const std::pair<HostId2PathSeleKey, uint32_t>& a, 
+       const std::pair<HostId2PathSeleKey, uint32_t>& b) {
+        return a.second > b.second;  // 降序排列（大的在前）
+    });
+
+// 将排序结果赋给静态变量
+RdmaSmartFlowRouting::sorted_path_flow_counts = std::move(temp_sorted_flow_counts);
+
   }
   void node_install_LLMA_rdma_application(global_variable_t *varMap)
   {
@@ -4500,6 +4594,9 @@ void install_routing_entries_based_on_single_smt_entry_for_laps(NodeContainer no
     // save_ecmp_outinfo(&varMap);
     //
     save_qpFinshtest_outinfo(varMap);
+     //======================新增部分，记录路径带宽利用率=========================
+    save_utilizationChange_outinfo(varMap);
+
     save_QPExec_outinfo(varMap);
 
     // save_QPSend_outinfo(varMap);
