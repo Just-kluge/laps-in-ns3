@@ -559,6 +559,21 @@ namespace ns3
      RdmaHw::m_recordQpExec[flowId].lastQpSendRate=q->m_rate.GetBitRate();
 
 
+
+       if(m->lbsName=="e2elaps"){
+        RdmaHw:: insertRateRecord(q->m_flow_id, q->laps.m_curRate.GetBitRate()/1000000/8);
+       }
+       else{
+         RdmaHw:: insertRateRecord(q->m_flow_id, q->m_rate.GetBitRate()/1000000/8);
+       }
+
+
+
+
+
+       
+     //std::cout<<"qp_finish: "<<"srcIpAddr"<<ipv4Address_to_string(srcIpAddr)<<"dstIpAddr"<<ipv4Address_to_string(dstIpAddr)<<"flowId"<<flowId<<"lastQpSendRate"<<RdmaHw::m_recordQpExec[flowId].lastQpSendRate<<std::endl;
+
     // fprintf(os, "SIP:%08x DIP:%08x SP:%u DP:%u DataSizeInByte:%lu PktSizeInByte:%u SendPktSizeInByte:%lu StartTimeInNs:%lu LastTimeInNs:%lu EndTimeInNs:%lu BaseFctInNs:%ld\n",
     //         q->sip.Get(),
     //         q->dip.Get(),
@@ -2596,6 +2611,7 @@ std::cout << "拒绝比例:" << (double)(RdmaSmartFlowRouting::s_relErrorStats.r
 void save_utilizationChange_outinfo(global_variable_t *varMap){
     NS_LOG_INFO("----------save QpRateChange outinfo()----------");
     std::string file_name = varMap->outputFileDir + varMap->fileIdx + "-PathUtilizationChange.txt";
+    std::cout<<"save_utilizationChange_outinfo"<<std::endl;
     FILE *file = fopen(file_name.c_str(), "w");
     if (file == NULL) {
         NS_LOG_ERROR("Cannot open file " << file_name);
@@ -2628,6 +2644,44 @@ void save_utilizationChange_outinfo(global_variable_t *varMap){
             fprintf(file, "\n");
         }
     }
+
+    fflush(file);
+    fclose(file);
+    return;
+
+
+
+}
+
+
+
+void save_Avg_utilizationChange_outinfo(global_variable_t *varMap){
+    NS_LOG_INFO("----------save QpRateChange outinfo()----------");
+    std::string file_name = varMap->outputFileDir + varMap->fileIdx + "-AVGPathUtilizationChange.txt";
+    //std::cout<<"save_utilizationChange_outinfo"<<std::endl;
+    FILE *file = fopen(file_name.c_str(), "w");
+    if (file == NULL) {
+        NS_LOG_ERROR("Cannot open file " << file_name);
+        return;
+    }
+
+     // 输出表头
+    fprintf(file, "节点\t端口\t平均利用率\n");
+    
+    // 遍历 record_all_port_avg_utilization_rate 中的所有数据
+    for (const auto& node_pair : RdmaSmartFlowRouting::record_all_port_avg_utilization_rate) {
+        uint32_t nodeId = node_pair.first;
+        const std::map<uint32_t, record_utilization_rate>& portMap = node_pair.second;
+        
+        for (const auto& port_pair : portMap) {
+            uint32_t portId = port_pair.first;
+            const record_utilization_rate& avg_utilization = port_pair.second;
+            
+            // 输出格式: 节点 端口 平均利用率
+            fprintf(file, "%u\t%u\t%.6f\n", nodeId, portId, avg_utilization.utilization_rate);
+        }
+    }
+ 
 
     fflush(file);
     fclose(file);
@@ -4595,8 +4649,10 @@ RdmaSmartFlowRouting::sorted_path_flow_counts = std::move(temp_sorted_flow_count
     //
     save_qpFinshtest_outinfo(varMap);
      //======================新增部分，记录路径带宽利用率=========================
-    save_utilizationChange_outinfo(varMap);
+    //save_utilizationChange_outinfo(varMap);
+    save_Avg_utilizationChange_outinfo(varMap);
 
+    
     save_QPExec_outinfo(varMap);
 
     // save_QPSend_outinfo(varMap);

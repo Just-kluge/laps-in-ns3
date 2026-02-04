@@ -32,6 +32,7 @@ namespace ns3
     std::map<uint32_t, Ptr<Node>> RdmaSmartFlowRouting::nodeIdToNodeMap;
     std::map<HostId2PathSeleKey, std::map<uint32_t,std::vector<record_utilization_rate>>>RdmaSmartFlowRouting::record_path_utilization_rate;
     std::map<uint32_t, std::map<uint32_t, std::vector<record_utilization_rate>>> RdmaSmartFlowRouting::record_all_port_utilization_rate;
+    std::map<uint32_t, std::map<uint32_t,record_utilization_rate>> RdmaSmartFlowRouting::record_all_port_avg_utilization_rate;
     std::map<HostId2PathSeleKey,e2e_all_flow_dur >RdmaSmartFlowRouting::record_path_e2e_all_flow_dur;
     std::map<HostId2PathSeleKey,uint32_t> RdmaSmartFlowRouting::record_path_flow_num;
     std::vector<std::pair<HostId2PathSeleKey, uint32_t>> RdmaSmartFlowRouting:: sorted_path_flow_counts;

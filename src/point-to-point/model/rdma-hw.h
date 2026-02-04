@@ -282,7 +282,7 @@ namespace ns3
       void InitializePathBdpForAllPaths(std::vector<Ptr<Node>> allNodes1) ;
 	  void decreaseBDPForPath(uint32_t pathId,uint16_t size);
   void UpdateRateForLapsBasedOnBDP(Ptr<RdmaQueuePair> qp,  uint32_t increaserate);
-
+  void UpdatePortUtilization(Ptr<Packet> p, CustomHeader &ch);
 
 	};
 

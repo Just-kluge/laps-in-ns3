@@ -354,6 +354,8 @@ void CoutHighestWeightPercent(void) const
 
 struct record_utilization_rate{
     uint32_t time=0;
+    //给平均带宽利用率使用
+    uint64_t update_count=0;
     double utilization_rate=0;
 };
 
@@ -381,7 +383,7 @@ struct record_utilization_rate{
     
        //===========================每个节点记录各个端口定期的数据发送量用来计算带宽利用率=======================
      std::map<uint32_t, send_data> record_each_port_send_data;
-     //两节点，路径id,利用率随时间变化数组
+     //两节点，路径id,利用率随时间变化数组；记录节点对之间所有路径利用率随时间变化
          static std::map<HostId2PathSeleKey, std::map<uint32_t,std::vector<record_utilization_rate>>>record_path_utilization_rate;
          //记录两点之间所有流最早开始时间和最晚完成时间。
          static std::map<HostId2PathSeleKey,e2e_all_flow_dur >record_path_e2e_all_flow_dur;
@@ -389,8 +391,12 @@ struct record_utilization_rate{
          //记录所有节点对之间产生流的数量，降序排列
          static std::map<HostId2PathSeleKey,uint32_t> record_path_flow_num;
           static std::vector<std::pair<HostId2PathSeleKey, uint32_t>> sorted_path_flow_counts;
+
+
+
     //-------------------------------------------------------------------启动laps_plus-----------------------------------------------------
      static std::map<uint32_t, std::map<uint32_t,std::vector<record_utilization_rate>>> record_all_port_utilization_rate;
+     static std::map<uint32_t, std::map<uint32_t,record_utilization_rate>> record_all_port_avg_utilization_rate;
     static bool enable_laps_plus;
     static u_int32_t choose_softmax;
      static uint64_t sum_data_receive;

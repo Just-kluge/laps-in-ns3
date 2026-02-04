@@ -892,6 +892,20 @@ namespace ns3 {
 			plbtag.SetRandomNum(randNum);
 			p->AddPacketTag(plbtag);
 			m_traceDequeue(p, 0);
+			//====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
+            uint32_t port_id = GetIfIndex();
+           // std::cout<<1<<std::endl;
+		   Ptr<RdmaSmartFlowRouting> m_routing = m_rdmaGetE2ELapsLBouting();
+
+            if(m_routing->record_each_port_send_data[port_id].send_data_byte==0){
+                m_routing->record_each_port_send_data[port_id].time=Simulator::Now().GetNanoSeconds();
+        
+               m_routing-> record_each_port_send_data[port_id].port_rate = GetDataRate().GetBitRate();
+            }
+           m_routing->record_each_port_send_data[port_id].send_data_byte+=p->GetSize();
+		   
+         // std::cout <<"端口"<<port_id<< " 发送ACK包" << p->GetSize()<<",dqdx"<<m_routing->record_each_port_send_data[port_id].send_data_byte<<std::endl;
+    //====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
 			TransmitStart(p);
 			Isack = true;
 			return Isack;
@@ -944,6 +958,19 @@ namespace ns3 {
 		plbtag.SetRandomNum(randNum);
 		p->AddPacketTag(plbtag);
 		m_traceQpDequeue(p, lastQp);
+		//====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
+            uint32_t port_id = GetIfIndex();
+           // std::cout<<1<<std::endl;
+		   Ptr<RdmaSmartFlowRouting> m_routing = m_rdmaGetE2ELapsLBouting();
+
+            if(m_routing->record_each_port_send_data[port_id].send_data_byte==0){
+                m_routing->record_each_port_send_data[port_id].time=Simulator::Now().GetNanoSeconds();        
+               m_routing-> record_each_port_send_data[port_id].port_rate = GetDataRate().GetBitRate();
+            }
+           m_routing->record_each_port_send_data[port_id].send_data_byte+=p->GetSize();
+		  // if(m_node->GetId()==110)
+          //std::cout <<"端口"<<port_id<< " 发送ACK包" << p->GetSize()<<",dqdx"<<m_routing->record_each_port_send_data[port_id].send_data_byte<<std::endl;
+    //====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
 		TransmitStart(p);
 		m_rdmaPktSent(lastQp, p, m_tInterframeGap);
 		Isack = false;
@@ -1035,7 +1062,7 @@ namespace ns3 {
 			{
 				// exist packet to send
 				if (m_lbSolution == LB_Solution::LB_PLB)
-				{
+				{//==================================================================================================
 					PLB_LBSolution(qIndex);
 					return;
 				}
@@ -1050,9 +1077,25 @@ namespace ns3 {
 						// exist ack packets in the highest priority queue
 						p = m_rdmaEQ->DequeueQindex(QINDEX_OF_ACK_PACKET_IN_SERVER); // get the actual packet to send
 						p->PeekHeader(ch);
-						m_traceDequeue(p, 0);										 // trace the current packet
-						TransmitStart(p);											 // start the sending action
+						m_traceDequeue(p, 0); 
+			//====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
+            uint32_t port_id = GetIfIndex();
+           // std::cout<<1<<std::endl;
+		   Ptr<RdmaSmartFlowRouting> m_routing = m_rdmaGetE2ELapsLBouting();
 
+            if(m_routing->record_each_port_send_data[port_id].send_data_byte==0){
+                m_routing->record_each_port_send_data[port_id].time=Simulator::Now().GetNanoSeconds();
+        
+               m_routing-> record_each_port_send_data[port_id].port_rate = GetDataRate().GetBitRate();
+            }
+           m_routing->record_each_port_send_data[port_id].send_data_byte+=p->GetSize();
+		
+          //std::cout <<"端口"<<port_id<< " 发送ACK包" << p->GetSize()<<",dqdx"<<m_routing->record_each_port_send_data[port_id].send_data_byte<<std::endl;
+    //====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
+        										 // trace the current packet
+						TransmitStart(p);	
+																 // start the sending action
+       
 						// std::string stringhash = ipv4Address2string(Ipv4Address(ch.dip)) + "#" + ipv4Address2string(Ipv4Address(ch.sip)) + "#" + std::to_string(ch.ack.sport); // srcPort=dstPort
 
 						// std::string flowId = stringhash;
@@ -1079,6 +1122,21 @@ namespace ns3 {
 					// RdmaHw::m_recordQpExec[flowId].sendSizeInbyte += p->GetSize();
 					// RdmaHw::m_recordQpExec[flowId].sendPacketNum++;
 					// transmit
+
+		    //====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
+            uint32_t port_id = GetIfIndex();
+           // std::cout<<1<<std::endl;
+		   Ptr<RdmaSmartFlowRouting> m_routing = m_rdmaGetE2ELapsLBouting();
+
+            if(m_routing->record_each_port_send_data[port_id].send_data_byte==0){
+                m_routing->record_each_port_send_data[port_id].time=Simulator::Now().GetNanoSeconds();
+        
+               m_routing-> record_each_port_send_data[port_id].port_rate = GetDataRate().GetBitRate();
+            }
+           m_routing->record_each_port_send_data[port_id].send_data_byte+=p->GetSize();
+		 
+         // std::cout <<"端口"<<port_id<< " 发送数据包" << p->GetSize()<<"，dqdx"<<m_routing->record_each_port_send_data[port_id].send_data_byte<<std::endl;
+    //====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
 					m_traceQpDequeue(p, lastQp);
 					TransmitStart(p);
 					uint32_t flowId = lastQp->m_flow_id;
