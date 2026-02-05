@@ -2690,8 +2690,107 @@ void save_Avg_utilizationChange_outinfo(global_variable_t *varMap){
 
 
 }
-
-
+ 
+// 新增函数：计算路径超额使用率统计
+  void calculate_path_overuse_statistics(global_variable_t *varMap)
+  {
+    NS_LOG_INFO("Calculating path overuse statistics...");
+    
+    // 用于存储每个长度排名的超额使用率统计
+    std::map<uint32_t, std::vector<double>> length_rank_to_overuse_rates;
+    
+    // 遍历所有的HostId2PathSeleKey
+    for (const auto& pst_key_pair : RdmaSmartFlowRouting::record_path_cal) {
+        const HostId2PathSeleKey& pstKey = pst_key_pair.first;
+        const cal& path_cal_data = pst_key_pair.second;
+        
+        // 获取该HostId2PathSeleKey下的所有路径
+        std::vector<std::pair<uint32_t, uint32_t>> path_lengths; // {path_id, length}
+        
+        for (const auto& path_data_pair : path_cal_data.record_path_send) {
+            uint32_t path_id = path_data_pair.first;
+            const record_path_send_data& path_stats = path_data_pair.second;
+            path_lengths.push_back({path_id, path_stats.path_length});
+        }
+        
+        // 按路径长度排序（升序）
+        std::sort(path_lengths.begin(), path_lengths.end(),
+                  [](const std::pair<uint32_t, uint32_t>& a, const std::pair<uint32_t, uint32_t>& b) {
+                      return a.second < b.second;
+                  });
+        
+        // 为相同长度的路径分配相同的排名（这才是正确的逻辑）
+        std::map<uint32_t, uint32_t> path_id_to_rank;
+        std::map<uint32_t, uint32_t> length_to_rank;  // 长度到排名的映射
+        uint32_t current_rank = 1;
+        
+        for (size_t i = 0; i < path_lengths.size(); ++i) {
+            uint32_t length = path_lengths[i].second;
+            // 如果这是新长度，则增加排名
+            if (length_to_rank.find(length) == length_to_rank.end()) {
+                length_to_rank[length] = current_rank++;
+            }
+            // if(current_rank==5){
+            //  for (size_t i = 0; i < path_lengths.size(); ++i){
+            //   std::cout<<"path_id:"<<path_lengths[i].first<<" length:"<<path_lengths[i].second<<" rank:"<<length_to_rank[path_lengths[i].second]<<std::endl;
+            //  }
+            // }
+            path_id_to_rank[path_lengths[i].first] = length_to_rank[length];
+        }
+        
+        // 计算每条路径的超额使用率
+        uint32_t total_paths = path_lengths.size();
+        if (total_paths == 0 || path_cal_data.sum_data_byte == 0) continue;
+        
+        for (const auto& path_data_pair : path_cal_data.record_path_send) {
+            uint32_t path_id = path_data_pair.first;
+            const record_path_send_data& path_stats = path_data_pair.second;
+            
+            // 计算使用率
+            double usage_rate = (double)path_stats.data_byte / path_cal_data.sum_data_byte;
+            
+            // 计算超额使用率
+            double overuse_rate = usage_rate * total_paths;
+            
+            // 获取路径长度排名
+            uint32_t length_rank = path_id_to_rank[path_id];
+            
+            // 存储到对应排名的统计中
+            length_rank_to_overuse_rates[length_rank].push_back(overuse_rate);
+        }
+    }
+    
+    // 计算并输出每个长度排名的平均超额使用率
+    std::string file_name = varMap->outputFileDir + varMap->fileIdx + "-PathOveruseStatistics.txt";
+    FILE *file = fopen(file_name.c_str(), "w");
+    if (file == NULL) {
+        NS_LOG_ERROR("Cannot open file " << file_name);
+        return;
+    }
+    
+    fprintf(file, "LengthRank\tAvgOveruseRate\tSampleCount\n");
+    
+    for (const auto& rank_data_pair : length_rank_to_overuse_rates) {
+        uint32_t rank = rank_data_pair.first;
+        const std::vector<double>& overuse_rates = rank_data_pair.second;
+        
+        if (overuse_rates.empty()) continue;
+        
+        // 计算平均超额使用率
+        double sum_overuse = std::accumulate(overuse_rates.begin(), overuse_rates.end(), 0.0);
+        double avg_overuse = sum_overuse / overuse_rates.size();
+        
+        fprintf(file, "%u\t%.6f\t%lu\n", rank, avg_overuse, overuse_rates.size());
+        
+        std::cout<<"Length Rank " << rank << ": Avg Overuse Rate = " << avg_overuse 
+                  << ", Sample Count = " << overuse_rates.size()<<std::endl;
+    }
+    
+    fflush(file);
+    fclose(file);
+    
+    NS_LOG_INFO("Path overuse statistics calculation completed.");
+  }
 
   void save_flow_packetSenTimeGap(global_variable_t *varMap)
   {
@@ -4651,7 +4750,7 @@ RdmaSmartFlowRouting::sorted_path_flow_counts = std::move(temp_sorted_flow_count
      //======================新增部分，记录路径带宽利用率=========================
     //save_utilizationChange_outinfo(varMap);
     save_Avg_utilizationChange_outinfo(varMap);
-
+    calculate_path_overuse_statistics(varMap);
     
     save_QPExec_outinfo(varMap);
 

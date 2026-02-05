@@ -36,6 +36,7 @@ namespace ns3
     std::map<HostId2PathSeleKey,e2e_all_flow_dur >RdmaSmartFlowRouting::record_path_e2e_all_flow_dur;
     std::map<HostId2PathSeleKey,uint32_t> RdmaSmartFlowRouting::record_path_flow_num;
     std::vector<std::pair<HostId2PathSeleKey, uint32_t>> RdmaSmartFlowRouting:: sorted_path_flow_counts;
+     std::map<HostId2PathSeleKey,cal > RdmaSmartFlowRouting:: record_path_cal;
      RelErrorStats RdmaSmartFlowRouting::s_relErrorStats;
 
    uint32_t RdmaSmartFlowRouting::choose_softmax=0; 
@@ -2122,6 +2123,20 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
         uint32_t selPathIndex = GetPathBasedOnWeight(weights);
         NS_ASSERT_MSG(selPathIndex < pitEntries.size(), "The selected path index is out of range");
         uint32_t fPid = pitEntries[selPathIndex]->pid;
+
+           //============记录每条路径发送数据量====================================
+           //一条路径的排除
+           if(pstEntry->paths.size()!=1){
+            RdmaSmartFlowRouting:: record_path_cal[pstKey].record_path_send[fPid].data_byte += p->GetSize();
+           RdmaSmartFlowRouting:: record_path_cal[pstKey].sum_data_byte += p->GetSize();
+           RdmaSmartFlowRouting:: record_path_cal[pstKey].record_path_send[fPid].path_length = pitEntries[selPathIndex]->portSequence.size();
+           }
+         
+     
+
+
+
+
         add_path_tag_by_path_id(entry->dataPacket, fPid);
 
 //====================================增加对应端口的数据包记录，用来记录实际端口利用率==========
@@ -2229,6 +2244,7 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
         else if (Irn::mode == Irn::Mode::IRN_OPT)
         {
             std::vector<double> weights = CalPathWeightBasedOnDelay(pitEntries);
+            //std::cout<<"PIT size: "<<pitEntries.size()<<std::endl;
             selPathIndex = GetPathBasedOnWeight(weights);
         }
         else

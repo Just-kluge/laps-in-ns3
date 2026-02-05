@@ -364,6 +364,20 @@ struct record_utilization_rate{
      //========
       uint64_t endtime=-1;
     };
+
+
+    struct  record_path_send_data{
+     uint64_t data_byte=0;
+      uint32_t path_length=0;
+    };
+ struct cal{
+     uint64_t sum_data_byte=0;
+    /// 键值:pid
+    std::map<uint32_t, record_path_send_data> record_path_send;    
+    };
+
+
+
   class RdmaSmartFlowRouting : public Object
   {
     // friend class SwitchMmu;
@@ -391,8 +405,8 @@ struct record_utilization_rate{
          //记录所有节点对之间产生流的数量，降序排列
          static std::map<HostId2PathSeleKey,uint32_t> record_path_flow_num;
           static std::vector<std::pair<HostId2PathSeleKey, uint32_t>> sorted_path_flow_counts;
-
-
+//==========记录每个pst表中各路径上个发了多少数据，还记录了一个pst表里面相同长度路径的个数，以次来计算不同长度的路径被选择的概率怎么样，预期时一个pst中最短路径被选择的概率最高，还要除掉路径个数对结果的影响。
+       static std::map<HostId2PathSeleKey,cal > record_path_cal;
 
     //-------------------------------------------------------------------启动laps_plus-----------------------------------------------------
      static std::map<uint32_t, std::map<uint32_t,std::vector<record_utilization_rate>>> record_all_port_utilization_rate;
