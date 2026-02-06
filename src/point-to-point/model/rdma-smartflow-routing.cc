@@ -24,6 +24,7 @@
 #include "ns3/ppp-header.h"
 #include "ns3/flow-id-tag.h"
 #include <ns3/rdma-driver.h>
+#include <ns3/switch-node.h>
 namespace ns3
 {
 
@@ -37,13 +38,16 @@ namespace ns3
     std::map<HostId2PathSeleKey,uint32_t> RdmaSmartFlowRouting::record_path_flow_num;
     std::vector<std::pair<HostId2PathSeleKey, uint32_t>> RdmaSmartFlowRouting:: sorted_path_flow_counts;
      std::map<HostId2PathSeleKey,cal > RdmaSmartFlowRouting:: record_path_cal;
+     std::map<uint32_t, std::map<uint32_t,std::vector<record_queue_length>>> RdmaSmartFlowRouting:: record_all_port_queue_len;
      RelErrorStats RdmaSmartFlowRouting::s_relErrorStats;
-
+     record_avg_queue_length  RdmaSmartFlowRouting::avg_port_length;
+     bool RdmaSmartFlowRouting::is_sim_finish=false;
    uint32_t RdmaSmartFlowRouting::choose_softmax=0; 
    uint64_t RdmaSmartFlowRouting::record_time=0;
   uint64_t RdmaSmartFlowRouting::sum_data_receive=0;
     uint64_t RdmaSmartFlowRouting::sum_data=0;
     uint64_t RdmaSmartFlowRouting::key=0;
+
     // 在类外部初始化静态成员变量
     std::vector<probeInfoEntry> RdmaSmartFlowRouting::m_prbInfoTable(0);
     std::map<std::string, reorder_entry_t> RdmaSmartFlowRouting::m_reorderTable;
@@ -2535,5 +2539,42 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
         
           
     }
+
+    void RdmaSmartFlowRouting::RecordAllPortQueueLength()
+{
+    uint64_t currentTime = Simulator::Now().GetNanoSeconds();
+    
+    // 遍历所有节点
+    for (const auto& nodePair : nodeIdToNodeMap) 
+    {
+        uint32_t nodeId = nodePair.first;
+        Ptr<Node> node = nodePair.second;
+        
+        // 获取交换机节点
+        Ptr<SwitchNode> swNode = DynamicCast<SwitchNode>(node);
+        if (swNode == nullptr) {
+            continue; // 跳过非交换机节点
+        }
+        
+        // 遍历所有端口
+        for (uint32_t portId = 1; portId <=swNode->GetNDevices(); portId++) 
+        {
+            uint32_t totalQueueLength = 0;
+            
+            // 计算所有优先级队列的总长度（以字节为单位）
+            for (int priority = 0; priority < 8; priority++) {
+                totalQueueLength += swNode->m_mmu->egress_bytes[portId][priority];
+            }
+            
+            // 创建记录条目
+            record_queue_length queueRecord;
+            queueRecord.length = totalQueueLength;
+            
+            
+            // 记录到静态变量中
+            record_all_port_queue_len[nodeId][portId].push_back(queueRecord);
+        }
+    }
+}
 
 }

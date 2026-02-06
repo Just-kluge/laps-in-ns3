@@ -358,6 +358,9 @@ struct record_utilization_rate{
     uint64_t update_count=0;
     double utilization_rate=0;
 };
+struct record_queue_length{
+      uint32_t length=0;
+};
 
  struct e2e_all_flow_dur{
      uint64_t starttime=-1;
@@ -376,7 +379,11 @@ struct record_utilization_rate{
     std::map<uint32_t, record_path_send_data> record_path_send;    
     };
 
+struct record_avg_queue_length{
+      double now_avg_port_length=0;
+      uint32_t count=0;
 
+};
 
   class RdmaSmartFlowRouting : public Object
   {
@@ -407,11 +414,16 @@ struct record_utilization_rate{
           static std::vector<std::pair<HostId2PathSeleKey, uint32_t>> sorted_path_flow_counts;
 //==========记录每个pst表中各路径上个发了多少数据，还记录了一个pst表里面相同长度路径的个数，以次来计算不同长度的路径被选择的概率怎么样，预期时一个pst中最短路径被选择的概率最高，还要除掉路径个数对结果的影响。
        static std::map<HostId2PathSeleKey,cal > record_path_cal;
+       //记录当带宽利用率超过80%以上的端口队列平均长度
+       static record_avg_queue_length avg_port_length;
 
+//===============================记录端口队列长度，每2us 记录一次
+static std::map<uint32_t, std::map<uint32_t,std::vector<record_queue_length>>> record_all_port_queue_len;
     //-------------------------------------------------------------------启动laps_plus-----------------------------------------------------
      static std::map<uint32_t, std::map<uint32_t,std::vector<record_utilization_rate>>> record_all_port_utilization_rate;
      static std::map<uint32_t, std::map<uint32_t,record_utilization_rate>> record_all_port_avg_utilization_rate;
     static bool enable_laps_plus;
+    static bool is_sim_finish;
     static u_int32_t choose_softmax;
      static uint64_t sum_data_receive;
     static uint64_t sum_data;
@@ -440,7 +452,7 @@ struct record_utilization_rate{
     bool RouteInput(Ptr<Packet> p, CustomHeader ch);
     void RouteOutput(Ptr<Packet> p, CustomHeader ch, Ptr<E2ESrcOutPackets> &SrcOutEntry); // E2E LB input
     bool e2eLBSrc_output_packet(Ptr<E2ESrcOutPackets> &SrcOutEntry);
-
+      static void RecordAllPortQueueLength();
     void add_latency_tag_by_pit_entries(Ptr<Packet> packet, std::vector<PathData *> &pitEntries);
     void add_path_tag_by_path_id(Ptr<Packet> packet, uint32_t pid);
     void add_probe_tag_by_path_id(Ptr<Packet> packet, uint32_t expiredPathId);

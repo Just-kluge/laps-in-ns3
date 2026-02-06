@@ -2606,8 +2606,80 @@ std::cout << "拒绝比例:" << (double)(RdmaSmartFlowRouting::s_relErrorStats.r
     return;
   }
 
+void save_avg_port_length(global_variable_t *varMap){
 
-  
+    std::string file_name = varMap->outputFileDir + "-All_Arg_avg_queue_length.txt";
+    
+    // 先读取现有文件内容，检查是否已存在相同的fileIdx
+    std::vector<std::string> file_lines;
+    std::ifstream infile(file_name);
+    std::string line;
+    bool found_existing = false;
+    
+    if (infile.is_open()) {
+        while (std::getline(infile, line)) {
+            // 检查是否包含当前的fileIdx
+            if (line.find("fileIdx:" + varMap->fileIdx) != std::string::npos) {
+                found_existing = true;
+                // 跳过旧的记录行
+                std::getline(infile, line); // 跳过avg_port_length行
+                continue;
+            }
+            file_lines.push_back(line);
+        }
+        infile.close();
+    }
+    
+    // 以追加模式打开文件
+    FILE *file = fopen(file_name.c_str(), "a");
+    if (file == NULL)
+    {
+        perror("Error opening file");
+        return;
+    }
+    
+    // 如果是新记录或者更新现有记录，写入数据
+    if (!found_existing) {
+        // 写入文件头部信息（如果是第一次写入）
+        if (file_lines.empty()) {
+            fprintf(file, "# File format: fileIdx:<index> avg_port_length:<value> count:<value>\n");
+        }
+    }
+    
+    // 写入当前数据
+    fprintf(file, "fileIdx:%s avg_port_length:%.6f count:%u\n", 
+            varMap->fileIdx.c_str(), 
+            RdmaSmartFlowRouting::avg_port_length.now_avg_port_length,
+            RdmaSmartFlowRouting::avg_port_length.count);
+    
+    fflush(file);
+    fclose(file);
+    
+    // 如果找到了现有的记录，需要重写整个文件
+    if (found_existing) {
+        FILE *rewrite_file = fopen(file_name.c_str(), "w");
+        if (rewrite_file != NULL) {
+            // 写入头部
+            fprintf(rewrite_file, "# File format: fileIdx:<index> avg_port_length:<value> count:<value>\n");
+            // 写入所有旧的记录
+            for (const auto& old_line : file_lines) {
+                fprintf(rewrite_file, "%s\n", old_line.c_str());
+            }
+            // 写入更新的记录
+            fprintf(rewrite_file, "fileIdx:%s avg_port_length:%.6f count:%u\n", 
+                    varMap->fileIdx.c_str(), 
+                    RdmaSmartFlowRouting::avg_port_length.now_avg_port_length,
+                    RdmaSmartFlowRouting::avg_port_length.count);
+            
+            fflush(rewrite_file);
+            fclose(rewrite_file);
+        }
+    }
+    
+    return;
+}
+
+
 void save_utilizationChange_outinfo(global_variable_t *varMap){
     NS_LOG_INFO("----------save QpRateChange outinfo()----------");
     std::string file_name = varMap->outputFileDir + varMap->fileIdx + "-PathUtilizationChange.txt";
@@ -2657,7 +2729,7 @@ void save_utilizationChange_outinfo(global_variable_t *varMap){
 
 void save_Avg_utilizationChange_outinfo(global_variable_t *varMap){
     NS_LOG_INFO("----------save QpRateChange outinfo()----------");
-    std::string file_name = varMap->outputFileDir + varMap->fileIdx + "-AVGPathUtilizationChange.txt";
+    std::string file_name = varMap->outputFileDir + varMap->fileIdx + "-AVGPortUtilization.txt";
     //std::cout<<"save_utilizationChange_outinfo"<<std::endl;
     FILE *file = fopen(file_name.c_str(), "w");
     if (file == NULL) {
@@ -3103,6 +3175,31 @@ void save_Avg_utilizationChange_outinfo(global_variable_t *varMap){
     }
   }
 
+ void monitor_port_qlen(global_variable_t *varMap) {
+    NS_LOG_INFO("enableQlenMonitor : " << boolToString(varMap->enablePfc));
+    update_EST(varMap->paraMap, "enableQlenMonitor", boolToString(varMap->enablePfc));
+
+    // if (!varMap->enableQlenMonitor)
+    // {
+    //   std::cout << "enableQlenMonitor is False" << std::endl;
+    //   return;
+    // }
+    uint64_t curTimeInNs = Simulator::Now().GetNanoSeconds();
+
+     RdmaSmartFlowRouting::RecordAllPortQueueLength();
+
+   //std::cout<<"now time"<<curTimeInNs<<std::endl;
+    if ((curTimeInNs + varMap->qlenMonitorIntervalInNs) < (varMap->simEndTimeInSec * 1000000000) && (!Simulator::IsFinished()))
+    {
+      Simulator::Schedule(NanoSeconds(varMap->qlenMonitorIntervalInNs), &monitor_port_qlen, varMap);
+    }
+  }
+
+
+
+
+
+
   void monitor_pfc(FILE *os, Ptr<QbbNetDevice> dev, uint32_t type)
   {
     uint64_t curTimeInNs = Simulator::Now().GetNanoSeconds();
@@ -3257,6 +3354,7 @@ void save_Avg_utilizationChange_outinfo(global_variable_t *varMap){
       e1.delayInNs = DynamicCast<QbbChannel>(DynamicCast<QbbNetDevice>(d.Get(0))->GetChannel())->GetDelay().GetNanoSeconds();
       e1.bwInBitps = DynamicCast<QbbNetDevice>(d.Get(0))->GetDataRate().GetBitRate();
       edges[srcNode][dstNode].push_back(e1);
+      //std::cout << "Adding edge " << srcNodeIdx << " -> " << dstNodeIdx <<",port "<<e1.nicIdx<< std::endl;
 
       edge_t e2;
       e2.nicIdx = DynamicCast<QbbNetDevice>(d.Get(1))->GetIfIndex();
@@ -3264,6 +3362,7 @@ void save_Avg_utilizationChange_outinfo(global_variable_t *varMap){
       e2.delayInNs = DynamicCast<QbbChannel>(DynamicCast<QbbNetDevice>(d.Get(1))->GetChannel())->GetDelay().GetNanoSeconds();
       e2.bwInBitps = DynamicCast<QbbNetDevice>(d.Get(1))->GetDataRate().GetBitRate();
       edges[dstNode][srcNode].push_back(e2);
+      //std::cout << "Adding edge " << dstNodeIdx << " -> " << srcNodeIdx <<",port "<<e2.nicIdx<< std::endl;
     }
     NS_LOG_INFO("NumOfChannel : " << channelCnt);
     update_EST(varMap->paraMap, "NumOfChannel", channelCnt);
@@ -4749,8 +4848,11 @@ RdmaSmartFlowRouting::sorted_path_flow_counts = std::move(temp_sorted_flow_count
     save_qpFinshtest_outinfo(varMap);
      //======================新增部分，记录路径带宽利用率=========================
     //save_utilizationChange_outinfo(varMap);
-    save_Avg_utilizationChange_outinfo(varMap);
-    calculate_path_overuse_statistics(varMap);
+    //save_Avg_utilizationChange_outinfo(varMap);
+    //calculate_path_overuse_statistics(varMap);
+
+    save_avg_port_length(varMap);
+    std::cout<<"利用率>80%的端口平均队列长度："<<RdmaSmartFlowRouting::avg_port_length.now_avg_port_length<<std::endl;
     
     save_QPExec_outinfo(varMap);
 

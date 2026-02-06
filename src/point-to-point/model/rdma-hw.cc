@@ -4265,10 +4265,30 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 
 					RdmaSmartFlowRouting::record_all_port_utilization_rate[nodeId][portId].push_back(port_utilization_rate);
 					//===================更新带宽平均利用率==========================================
-					 double avg_utilization_rate=RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].utilization_rate;
+					//粗略将没用的丢弃,看看效果
+					if(utilization!=0){
+							 double avg_utilization_rate=RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].utilization_rate;
 					 uint32_t update_count=RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].update_count;
                     RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].utilization_rate=(double)( avg_utilization_rate*update_count + utilization)/(update_count+1);
 					RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].update_count++;
+					}
+
+					//添加计算交换机高负载端口平均队列长度 ---二月六号
+					if(utilization>0.8&&RdmaSmartFlowRouting::record_all_port_queue_len[nodeId][portId].size()!=0&&node->GetNodeType() != 0 ){
+						uint32_t sum_queue_len=0;
+                       uint32_t size1=RdmaSmartFlowRouting::record_all_port_queue_len[nodeId][portId].size();
+					   uint32_t count=RdmaSmartFlowRouting::avg_port_length.count;
+
+						for(uint32_t i=0;i<size1;i++){
+							sum_queue_len+=RdmaSmartFlowRouting::record_all_port_queue_len[nodeId][portId][i].length;
+						}
+
+                         double avg_queue_len=(double)(count*(RdmaSmartFlowRouting::avg_port_length.now_avg_port_length)+sum_queue_len)/(count+size1);
+                         RdmaSmartFlowRouting::avg_port_length.now_avg_port_length=avg_queue_len;
+						 RdmaSmartFlowRouting::avg_port_length.count+=size1;
+                     
+					}
+				
 					//std::cout<<"时间 "<<Simulator::Now().GetNanoSeconds()<<"，节点 "<<nodeId<<"，端口 "<<portId<<"，平均利用率 "<<RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].utilization_rate<<std::endl;
 					//===================更新带宽平均利用率==========================================
 					if(nodeId==1&&portId==1){
@@ -4284,6 +4304,8 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 				   }	//std::cout<<"时间 "<<Simulator::Now().GetNanoSeconds()<<"，节点 "<<nodeId<<std::endl;
 					
                   }
+				  //清除已经使用过的数据
+				  RdmaSmartFlowRouting::record_all_port_queue_len.clear();
 				   
                   //================================更新路径利用率============================
 				  if(RdmaSmartFlowRouting::enable_laps_plus){ 
