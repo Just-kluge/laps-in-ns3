@@ -512,6 +512,8 @@ namespace ns3
             // oss << std::setiosflags (std::ios::left) << std::setw (10) << 1.0*pfcDuration/1000 << spaces;
             // return oss.str();
             std::string str = "flowId=" + std::to_string(flowId) + ", ";
+            str +="pfcDuration=" + std::to_string(pfcDuration) + ", ";
+            str += "pauseCount=" + std::to_string(pauseCount) + ", ";
             str += "sentData=" + std::to_string(sendSizeInbyte) + ", ";
             str += "receData=" + std::to_string(receSizeInbyte) + ", ";
             // str += "sentAck=" + std::to_string(sendAckInbyte) + ", ";
@@ -534,7 +536,6 @@ namespace ns3
             str += "bytesLeft=" + std::to_string(bytesLeft) + ", ";
             str += "bytesLost=" + std::to_string(bytesLost) + ", ";
             str += "bytesFly=" + std::to_string(bytesFly) + ", ";
-            str += "windowSize=" + std::to_string(windowSize) + ", ";
             str += "maxNxtSeq=" + std::to_string(maxNxtSeq)+ ", ";
             str += "retransmissionCount=" + std::to_string(sendPacketNum-recePacketNum) + ", "; // 添加重传计数
             str +="FCT=" + std::to_string(finishTime-installTime) + ", "; 

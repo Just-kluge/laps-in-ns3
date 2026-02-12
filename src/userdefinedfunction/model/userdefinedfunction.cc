@@ -422,7 +422,7 @@ namespace ns3
   }
 
   void install_tcp_bulk_on_node_pair(Ptr<Node> srcServerNode, Ptr<Node> dstServerNode, uint16_t port, uint32_t flowSize, double START_TIME, double END_TIME)
-  {
+  {//std::cout << "install_tcp_bulk_on_node_pair()" << std::endl;
     Ptr<Ipv4> ipv4 = dstServerNode->GetObject<Ipv4>();
     Ipv4InterfaceAddress dstInterface = ipv4->GetAddress(1, 0);
     Ipv4Address dstAddress = dstInterface.GetLocal();
@@ -529,6 +529,14 @@ namespace ns3
     auto srcNode = m->addr2node[srcIpAddr];
 
     auto dstIpAddr = q->dip;
+    auto dport = q->dport;
+    if (  dport == 14510)
+		{
+			// 这里可以添加你想要执行的逻辑
+		//	std::cout<<"匹配到特定流结束: SIP="<<srcIpAddr<<", DIP="<< dstIpAddr<<", DPORT=14510"<<std::endl;
+			// 例如：可以设置特殊的参数或标记
+			// qp->SetSpecialFlag(true);
+		}
     /*
     if (m->addr2node.find(dstIpAddr) != m->addr2node.end())
     {
@@ -1748,7 +1756,7 @@ namespace ns3
         //========================允许每个端口多30个数据包的容量======================================
         if(varMap->enable_laps_plus)
         {
-              packet_number=25;
+              packet_number=20;
         }
 
         uint64_t txDelayInNs = uint64_t( packet_number * varMap->defaultPktSizeInByte / (1.0 * rateInbps / 1000000000lu / 8));
@@ -2580,7 +2588,7 @@ std::cout << "拒绝比例:" << (double)(RdmaSmartFlowRouting::s_relErrorStats.r
   }
 
   void
-  save_QpRateChange_outinfo(global_variable_t *varMap)
+save_QpRateChange_outinfo(global_variable_t *varMap)
   {
     NS_LOG_INFO("----------save QpRateChange outinfo()----------");
     std::string file_name = varMap->outputFileDir + varMap->fileIdx + "-QpRateChange.txt";
@@ -2607,75 +2615,117 @@ std::cout << "拒绝比例:" << (double)(RdmaSmartFlowRouting::s_relErrorStats.r
   }
 
 void save_avg_port_length(global_variable_t *varMap){
-
     std::string file_name = varMap->outputFileDir + "-All_Arg_avg_queue_length.txt";
     
-    // 先读取现有文件内容，检查是否已存在相同的fileIdx
-    std::vector<std::string> file_lines;
-    std::ifstream infile(file_name);
-    std::string line;
-    bool found_existing = false;
+    // 定义记录结构
+    struct CongestionRecord {
+        std::string fileIdx;
+        uint64_t P70_count;
+        uint64_t P80_count;
+        uint64_t P90_count;
+        uint64_t P95_count;
+        uint64_t P99_count;
+    };
     
+    std::vector<CongestionRecord> records;
+    bool file_exists = false;
+    
+    // 检查文件是否存在并读取现有数据
+    std::ifstream infile(file_name);
     if (infile.is_open()) {
+        file_exists = true;
+        std::string line;
+        std::getline(infile, line); // 跳过头部
+        
         while (std::getline(infile, line)) {
-            // 检查是否包含当前的fileIdx
-            if (line.find("fileIdx:" + varMap->fileIdx) != std::string::npos) {
-                found_existing = true;
-                // 跳过旧的记录行
-                std::getline(infile, line); // 跳过avg_port_length行
-                continue;
+            if (line.empty() || line[0] == '#') continue;
+            
+            CongestionRecord record;
+            // 更安全的解析方法 - 分割字符串而不是使用sscanf
+            std::istringstream iss(line);
+            std::string token;
+            
+            // 解析fileIdx
+            if (std::getline(iss, token, ' ')) {
+                if (token.substr(0, 8) == "fileIdx:") {
+                    record.fileIdx = token.substr(8);
+                }
             }
-            file_lines.push_back(line);
+            
+            // 解析各个计数值
+            while (std::getline(iss, token, ' ')) {
+                if (token.substr(0, 10) == "P70_count:") {
+                    record.P70_count = std::stoull(token.substr(10));
+                } else if (token.substr(0, 10) == "P80_count:") {
+                    record.P80_count = std::stoull(token.substr(10));
+                } else if (token.substr(0, 10) == "P90_count:") {
+                    record.P90_count = std::stoull(token.substr(10));
+                } else if (token.substr(0, 10) == "P95_count:") {
+                    record.P95_count = std::stoull(token.substr(10));
+                } else if (token.substr(0, 10) == "P99_count:") {
+                    record.P99_count = std::stoull(token.substr(10));
+                }
+            }
+            
+            // 只有当fileIdx不为空时才添加记录
+            if (!record.fileIdx.empty()) {
+                records.push_back(record);
+            }
         }
         infile.close();
     }
     
-    // 以追加模式打开文件
-    FILE *file = fopen(file_name.c_str(), "a");
-    if (file == NULL)
-    {
+    // 检查是否已存在相同fileIdx的记录
+    auto existing_it = std::find_if(records.begin(), records.end(),
+                                   [&varMap](const CongestionRecord& rec) {
+                                       return rec.fileIdx == varMap->fileIdx;
+                                   });
+    
+    // 创建新记录
+    CongestionRecord new_record;
+    new_record.fileIdx = varMap->fileIdx;
+    new_record.P70_count = RdmaSmartFlowRouting::m_record_congestion.P70_count;
+    new_record.P80_count = RdmaSmartFlowRouting::m_record_congestion.P80_count;
+    new_record.P90_count = RdmaSmartFlowRouting::m_record_congestion.P90_count;
+    new_record.P95_count = RdmaSmartFlowRouting::m_record_congestion.P95_count;
+    new_record.P99_count = RdmaSmartFlowRouting::m_record_congestion.P99_count;
+    
+    // 更新或添加记录
+    if (existing_it != records.end()) {
+        // 如果找到相同的fileIdx，更新数据
+        *existing_it = new_record;
+        std::cout << "Updated existing record for fileIdx: " << varMap->fileIdx << std::endl;
+    } else {
+        // 如果没有找到，添加新记录
+        records.push_back(new_record);
+        std::cout << "Added new record for fileIdx: " << varMap->fileIdx << std::endl;
+    }
+    
+    // 写入文件
+    FILE *file = fopen(file_name.c_str(), "w");
+    if (file == NULL) {
         perror("Error opening file");
         return;
     }
     
-    // 如果是新记录或者更新现有记录，写入数据
-    if (!found_existing) {
-        // 写入文件头部信息（如果是第一次写入）
-        if (file_lines.empty()) {
-            fprintf(file, "# File format: fileIdx:<index> avg_port_length:<value> count:<value>\n");
-        }
-    }
+    // 写入文件头部
+    fprintf(file, "# File format: fileIdx:<index> P70_count:<value> P80_count:<value> P90_count:<value> P95_count:<value> P99_count:<value>\n");
     
-    // 写入当前数据
-    fprintf(file, "fileIdx:%s avg_port_length:%.6f count:%u\n", 
-            varMap->fileIdx.c_str(), 
-            RdmaSmartFlowRouting::avg_port_length.now_avg_port_length,
-            RdmaSmartFlowRouting::avg_port_length.count);
+    // 写入所有记录
+    for (const auto& record : records) {
+        fprintf(file, "fileIdx:%s P70_count:%lu P80_count:%lu P90_count:%lu P95_count:%lu P99_count:%lu\n",
+                record.fileIdx.c_str(),
+                record.P70_count,
+                record.P80_count,
+                record.P90_count,
+                record.P95_count,
+                record.P99_count);
+    }
     
     fflush(file);
     fclose(file);
     
-    // 如果找到了现有的记录，需要重写整个文件
-    if (found_existing) {
-        FILE *rewrite_file = fopen(file_name.c_str(), "w");
-        if (rewrite_file != NULL) {
-            // 写入头部
-            fprintf(rewrite_file, "# File format: fileIdx:<index> avg_port_length:<value> count:<value>\n");
-            // 写入所有旧的记录
-            for (const auto& old_line : file_lines) {
-                fprintf(rewrite_file, "%s\n", old_line.c_str());
-            }
-            // 写入更新的记录
-            fprintf(rewrite_file, "fileIdx:%s avg_port_length:%.6f count:%u\n", 
-                    varMap->fileIdx.c_str(), 
-                    RdmaSmartFlowRouting::avg_port_length.now_avg_port_length,
-                    RdmaSmartFlowRouting::avg_port_length.count);
-            
-            fflush(rewrite_file);
-            fclose(rewrite_file);
-        }
-    }
-    
+    std::cout << "Total records in file: " << records.size() << std::endl;
     return;
 }
 
@@ -3177,7 +3227,7 @@ void save_Avg_utilizationChange_outinfo(global_variable_t *varMap){
 
  void monitor_port_qlen(global_variable_t *varMap) {
     NS_LOG_INFO("enableQlenMonitor : " << boolToString(varMap->enablePfc));
-    update_EST(varMap->paraMap, "enableQlenMonitor", boolToString(varMap->enablePfc));
+   // update_EST(varMap->paraMap, "enableQlenMonitor", boolToString(varMap->enablePfc));
 
     // if (!varMap->enableQlenMonitor)
     // {
@@ -4847,12 +4897,23 @@ RdmaSmartFlowRouting::sorted_path_flow_counts = std::move(temp_sorted_flow_count
     //
     save_qpFinshtest_outinfo(varMap);
      //======================新增部分，记录路径带宽利用率=========================
-    //save_utilizationChange_outinfo(varMap);
+     if(varMap->lbsName == "e2elaps"){
+     // ================1）记录某一条节点对之间所有路径的带宽利用率随时间变化情况
+      //save_utilizationChange_outinfo(varMap);
+     }
+    //  ================2）记录所有端口从开始到结束的平均带宽利用率
     //save_Avg_utilizationChange_outinfo(varMap);
+
+    //  ================3）记录对不同长度路径的偏好程度
     //calculate_path_overuse_statistics(varMap);
 
-    save_avg_port_length(varMap);
-    std::cout<<"利用率>80%的端口平均队列长度："<<RdmaSmartFlowRouting::avg_port_length.now_avg_port_length<<std::endl;
+     // ================4）记录数据包乱序程度
+    std::string reorderFileName = varMap->outputFileDir + varMap->fileIdx + "-ReorderDregree.txt";
+    SaveReorderDregree(reorderFileName,RdmaHw::reorderDistTbl);
+    
+    //  ================5）记录所有端口从开始到结束的平均端口长度
+    //save_avg_port_length(varMap);
+    //std::cout<<"利用率>80%的端口平均队列长度："<<RdmaSmartFlowRouting::avg_port_length.now_avg_port_length<<std::endl;
     
     save_QPExec_outinfo(varMap);
 

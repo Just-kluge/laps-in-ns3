@@ -385,6 +385,22 @@ struct record_avg_queue_length{
 
 };
 
+
+struct record_congestion{
+     u_int64_t P70_count=0;
+      u_int64_t P80_count=0;
+      u_int64_t P90_count=0;
+      u_int64_t P95_count=0;
+      u_int64_t P99_count=0;
+
+};
+struct qp_last_send_info{
+     uint64_t time=0;
+   
+     uint32_t pid=-1;
+     uint32_t delay=0;
+    };
+
   class RdmaSmartFlowRouting : public Object
   {
     // friend class SwitchMmu;
@@ -416,9 +432,13 @@ struct record_avg_queue_length{
        static std::map<HostId2PathSeleKey,cal > record_path_cal;
        //记录当带宽利用率超过80%以上的端口队列平均长度
        static record_avg_queue_length avg_port_length;
-
+       //记录端口拥塞次数
+       static record_congestion m_record_congestion;
 //===============================记录端口队列长度，每2us 记录一次
 static std::map<uint32_t, std::map<uint32_t,std::vector<record_queue_length>>> record_all_port_queue_len;
+
+//=======================记录每一个qp最近发送数据的时间等等信息，用于缓解数据包乱序
+std::map<int32_t, qp_last_send_info> record_qp_last_send_info;
     //-------------------------------------------------------------------启动laps_plus-----------------------------------------------------
      static std::map<uint32_t, std::map<uint32_t,std::vector<record_utilization_rate>>> record_all_port_utilization_rate;
      static std::map<uint32_t, std::map<uint32_t,record_utilization_rate>> record_all_port_avg_utilization_rate;
@@ -541,7 +561,7 @@ static std::map<uint32_t, std::map<uint32_t,std::vector<record_queue_length>>> r
     bool insert_entry_to_PST(pstEntryData &pstEntry);
     bool insert_entry_to_SMT(hostIp2SMT_entry_t &smtEntry);
 
-    std::vector<double> CalPathWeightBasedOnDelay(const std::vector<PathData *> paths , u_int32_t ch_seq=1);
+    std::vector<double> CalPathWeightBasedOnDelay(const std::vector<PathData *> paths , u_int32_t ch_seq=1,int32_t flow_id=-1);
     uint32_t GetPathBasedOnWeight(const std::vector<double> & weights);
 
 

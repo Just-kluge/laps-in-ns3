@@ -39,7 +39,7 @@ NS_LOG_COMPONENT_DEFINE ("BulkSendApplication");
 NS_OBJECT_ENSURE_REGISTERED (BulkSendApplication);
 
 void tcpSocketBaseBxCb (std::string fid, std::map<std::string, reorderDistEntry> * reorderDistTbl, Ptr<const Packet> p, const TcpHeader& tcpHdr) {
-
+      std::cout << "tcpSocketBaseBxCb11" << std::endl;
       uint32_t seq = tcpHdr.GetSequenceNumber ().GetValue();
       uint32_t pktSieInByte = p->GetSize();
       // std::cout << "Seq: " << seq << ", PacketSize: " << pktSieInByte << std::endl;

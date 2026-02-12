@@ -189,7 +189,7 @@ namespace ns3 {
 			total_rsrv += reserve;
 		}
 		shared_bytes = (buffer_size - total_hdrm - total_rsrv)/n_port;// ying
-
+         //std::cout<<"shared_bytes:"<<n_port<<std::endl;
 	}
 	void SwitchMmu::ConfigBufferSize(uint32_t size){
 		buffer_size = size;

@@ -41,6 +41,7 @@ namespace ns3
      std::map<uint32_t, std::map<uint32_t,std::vector<record_queue_length>>> RdmaSmartFlowRouting:: record_all_port_queue_len;
      RelErrorStats RdmaSmartFlowRouting::s_relErrorStats;
      record_avg_queue_length  RdmaSmartFlowRouting::avg_port_length;
+     record_congestion RdmaSmartFlowRouting::m_record_congestion;
      bool RdmaSmartFlowRouting::is_sim_finish=false;
    uint32_t RdmaSmartFlowRouting::choose_softmax=0; 
    uint64_t RdmaSmartFlowRouting::record_time=0;
@@ -1816,7 +1817,7 @@ namespace ns3
     }
 
 // 计算Softmax函数
-std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::vector<PathData *> paths, u_int32_t ch_seq) {
+std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::vector<PathData *> paths, u_int32_t ch_seq,int32_t flow_id) {
     NS_LOG_FUNCTION(this << paths.size());
     auto maxElement = std::max_element(paths.begin(), paths.end(),
             [](const PathData* lhs, const PathData* rhs) 
@@ -1872,6 +1873,9 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
      double max_weight=0.0;
   //===========================================================修改部分=====================================
        //std::cout<<"=========================================================="<<std::endl;
+
+
+
   for (size_t i = 0; i < weights.size(); i++)
         { 
             auto maps = m_pathBdpMap.find(paths[i]->pid);
@@ -1880,7 +1884,8 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
             switch (choose_softmax)
             {
             case 0:
-                multiplier = laps_alpha;
+                //multiplier = laps_alpha;
+                multiplier = 0.2;
                 break;
             case 1:
                 multiplier = 5.0;
@@ -1918,28 +1923,27 @@ std::vector<double> RdmaSmartFlowRouting::CalPathWeightBasedOnDelay(const std::v
             { 
             double ratio = -1.0 * (paths[i]->latency+84*paths[i]->sent_pkt_num )/ maxBastDelay * multiplier;
 
-             //   double ratio = -1.0 * (paths[i]->latency+paths[i]->d_t*(Simulator::Now().GetNanoSeconds() - paths[i]->tsGeneration.GetNanoSeconds()) )/ maxBastDelay * multiplier;
-            //std::cout<<"pid "<<paths[i]->pid<<",paths["<<i<<"]->latency " << paths[i]->latency << ", paths["<<i<<"]->sent_pkt_num " << paths[i]->sent_pkt_num<<",sum"<< paths[i]->latency+84*paths[i]->sent_pkt_num <<std::endl;
-           
-           
-           
-            weights[i] = std::exp(ratio);
-            //weights[i] = std::pow(2.0, ratio);
+             weights[i] = std::exp(ratio);
+            //======================缓解乱序=====================
+            if(record_qp_last_send_info[flow_id].time==0||record_qp_last_send_info[flow_id].pid==paths[i]->pid){
+                //是第一个数据包不用考虑前面一个数据包从哪里发送 或者  是上一条发送数据包路径，可以直接考虑
+                weights[i] = std::exp(ratio);
+            }
+            else{
+                //考虑上一个数据包发送时间
+            if(record_qp_last_send_info[flow_id].time+record_qp_last_send_info[flow_id].delay>Simulator::Now().GetNanoSeconds()+paths[i]->latency+5000)
+            {//后一个数据包可能会早到
+                weights[i] = 0;
+               
+            }
+            else{
+                weights[i] = std::exp(ratio);
+              }
 
 
-                //    if ((paths[i]->latency < paths[i]->theoreticalSmallestLatencyInNs)
-            //     || ((Simulator::Now().GetNanoSeconds()-paths[i]->tsGeneration.GetNanoSeconds()) >paths[i]->theoreticalSmallestLatencyInNs))
-            //     {
-            //         weights[i] = std::exp(ratio);
-            //     }
-            //     else
-            //     {
-            //         // std::cout<<"该路径不被选择，理由:路径实时时延："<<paths[i]->latency<<" ns, 路径基准时延："
-            //         // <<paths[i]->theoreticalSmallestLatencyInNs<<" ns, 路径距离上次更新时间："<<
-            //         // Simulator::Now().GetNanoSeconds()-paths[i]->tsGeneration.GetNanoSeconds()<<std::endl;
-            //         weights[i] = 0;
-            //     }
+            }
             
+             //======================缓解乱序=====================
 
 
                 
@@ -2121,8 +2125,8 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
         HostId2PathSeleKey pstKey(srcHostId, dstHostId);
         pstEntryData *pstEntry = lookup_PST(pstKey);
         std::vector<PathData *> pitEntries = batch_lookup_PIT(pstEntry->paths);
-
-        std::vector<double> weights = CalPathWeightBasedOnDelay(pitEntries,ch.udp.seq);
+        //
+        std::vector<double> weights = CalPathWeightBasedOnDelay(pitEntries,ch.udp.seq,entry->lastQp->m_flow_id);
 
         uint32_t selPathIndex = GetPathBasedOnWeight(weights);
         NS_ASSERT_MSG(selPathIndex < pitEntries.size(), "The selected path index is out of range");
@@ -2184,7 +2188,12 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
             entry->pidForDataPkt = fPid;
         }
         update_PIT_after_adding_path_tag(pitEntries[selPathIndex]);
-
+        //========================更新这个流发送数据包的时间和发送路径的时延，pid等等信息======================
+       int32_t flow_id=entry->lastQp->m_flow_id;
+       record_qp_last_send_info[flow_id].time=Simulator::Now().GetNanoSeconds();
+       record_qp_last_send_info[flow_id].pid=fPid;
+       record_qp_last_send_info[flow_id].delay=pitEntries[selPathIndex]->latency;
+       //std::cout<<"PktId: "<<p->GetUid()<<" Pid: "<<fPid<<" "<<record_qp_last_send_info[flow_id].time<<" "<<record_qp_last_send_info[flow_id].delay<<std::endl;
        //===============================记录该路径距离上次路径时延更新后发了多少包===================================
         pitEntries[selPathIndex]->sent_pkt_num++;
          //std::cout<<"PktId: "<<p->GetUid()<<" Pid: "<<fPid<<" "<<pitEntries[selPathIndex]->sent_pkt_num<<std::endl;
@@ -2569,6 +2578,24 @@ uint32_t RdmaSmartFlowRouting::GetPathBasedOnWeight(const std::vector<double> & 
             // 创建记录条目
             record_queue_length queueRecord;
             queueRecord.length = totalQueueLength;
+           //====================添加拥塞度记录==============
+             uint32_t pfc_pause= 150*1024;
+             //std::cout<<"端口号："<<portId<<"，总队列长度："<<totalQueueLength<<"，PFC阈值："<<pfc_pause<<std::endl;    
+             if((double)(totalQueueLength)/pfc_pause>0.7){
+                RdmaSmartFlowRouting:: m_record_congestion.P70_count++;
+
+             }else if((double)(totalQueueLength)/pfc_pause>0.8){
+             RdmaSmartFlowRouting:: m_record_congestion.P80_count++;
+            }
+            else if((double)(totalQueueLength)/pfc_pause>0.9){
+             RdmaSmartFlowRouting:: m_record_congestion.P90_count++;
+            }
+            else if((double)(totalQueueLength)/pfc_pause>0.95){
+              RdmaSmartFlowRouting::m_record_congestion.P95_count++;
+            }
+            else if((double)(totalQueueLength)/pfc_pause>0.99){
+             RdmaSmartFlowRouting:: m_record_congestion.P99_count++;
+            }
             
             
             // 记录到静态变量中

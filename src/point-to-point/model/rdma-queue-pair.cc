@@ -904,6 +904,7 @@ uint64_t RdmaQueuePair::GetWin()
 	bool RdmaQueuePair::IsFinished()
 	{
 		if (Irn::mode == Irn::Mode::IRN) {
+			//std::cout<<000;
 			uint32_t sack_seq, sack_sz;
 			if (m_irn.m_sack.peekFrontBlock(&sack_seq, &sack_sz)) {
 				if (snd_nxt == sack_seq) {
@@ -913,14 +914,17 @@ uint64_t RdmaQueuePair::GetWin()
 			}
 		}
 		else if (Irn::mode == Irn::Mode::IRN_OPT) {
+			//std::cout<<111;
 			m_irn.m_sack.checkFirstNackedBlockAndUpdateSndUna(snd_una);
 			return snd_una >= m_size;
 		}
 		else if (Irn::mode == Irn::Mode::NACK)
 		{
+			//std::cout<<222;
 			m_irn.m_sack.checkFirstNackedBlockAndUpdateSndUna(snd_una);
 			return snd_una >= m_size;
 		}
+		//std::cout<<333;
 		return snd_una >= m_size;
 	}
 

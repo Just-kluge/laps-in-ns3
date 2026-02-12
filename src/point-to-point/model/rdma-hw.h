@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include "pint.h"
 #include "common-user-model.h"
+#include "ns3/bulk-send-application.h"
 namespace ns3
 {
 
@@ -49,6 +50,7 @@ namespace ns3
 			dev = _dev;
 		}
 	};
+
 
 	class RdmaHw : public Object
 	{
@@ -283,6 +285,16 @@ namespace ns3
 	  void decreaseBDPForPath(uint32_t pathId,uint16_t size);
   void UpdateRateForLapsBasedOnBDP(Ptr<RdmaQueuePair> qp,  uint32_t increaserate);
   void UpdatePortUtilization(Ptr<Packet> p, CustomHeader &ch);
+
+  public:
+    
+    // 新增统计相关方法
+    //std::string getFlowIdentifier(Ptr<RdmaRxQueuePair> q);
+    void recordPacketReception(const std::string& flowId, uint32_t seq, uint32_t size, uint32_t expectedSeq);
+    void recordReorderPacket(Ptr<RdmaRxQueuePair> q, uint32_t seq, uint32_t size);
+    
+    // 静态乱序统计表
+    static std::map<std::string, reorderDistEntry> reorderDistTbl;
 
 	};
 

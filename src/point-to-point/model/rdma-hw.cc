@@ -29,6 +29,7 @@ namespace ns3
 	std::map<uint32_t, std::map<std::string, std::map<uint32_t, LostPacketEntry>>> RdmaHw::m_lossPacket;
 	std::map<std::string, std::string> RdmaHw::m_recordQpSen;
 	std::map<std::string, std::vector<RecordFlowRateEntry_t>> RdmaHw::m_qpRatechange;
+	std::map<std::string, reorderDistEntry> RdmaHw::reorderDistTbl;
 	uint32_t RdmaHw::flowComplteNum;
 	std::map<uint32_t, std::vector<RecordFlowRateEntry_t>> RdmaHw::recordRateMap;		  //
 	std::map<uint32_t, std::vector<RecordPathDelayEntry_t>> RdmaHw::recordPathDelayMap;		  //
@@ -448,6 +449,13 @@ namespace ns3
 	{
 		// create qp
 		Ptr<RdmaQueuePair> qp = CreateObject<RdmaQueuePair>(pg, sip, dip, sport, dport);
+			if ( dport == 14510|| dport == 14510)
+		{
+			// 这里可以添加你想要执行的逻辑
+			//std::cout<<"匹配到特定流: SIP="<<sip<<", DIP="<< dip<<", DPORT=14510"<<std::endl;
+			// 例如：可以设置特殊的参数或标记
+			// qp->SetSpecialFlag(true);
+		}
 		qp->SetSize(size);
 		qp->SetWin(win);
 		qp->SetBaseRtt(baseRtt);
@@ -724,7 +732,7 @@ namespace ns3
 	{
 		// remove qp from the m_qpMap
 		uint64_t key = GetQpKey(qp->dip.Get(), qp->sport, qp->dport, qp->m_pg);
-		// m_finishedQpMap[key] = 0;
+		 m_finishedQpMap[key] = 0;
 		m_qpMap.erase(key);
 	}
 
@@ -1690,6 +1698,10 @@ int RdmaHw::ReceiveProbeDataOnDstHostForLaps(Ptr<Packet> p, CustomHeader &ch)
 			}
 			else
 			{
+				std::cout <<"ACK：dip"<<ch.sip<<" "<<"sip"<<ch.dip<<" "<<"port"<<ch.ack.sport<<"qIndex"<<qIndex<<std::endl;
+				for(auto it=m_qpMap.begin();it!=m_qpMap.end();it++){
+					std::cout <<"QP dip"<<it->second->dip<<" "<<"sip"<<it->second->sip<<" "<<"port"<<it->second->sport<<std::endl;
+				}
 				std::cout << "ERROR: " << "node:" << m_node->GetId() << " cannot find the flow for " << (ch.l3Prot == 0xFC ? "ACK" : "NACK") << std::endl;
 				exit(1);
 			}
@@ -2479,11 +2491,24 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
     NS_LOG_FUNCTION (this << seq << seq+size);
 		NS_ASSERT_MSG(Irn::mode == Irn::Mode::IRN_OPT || Irn::mode == Irn::Mode::NACK, "This function is only for LAPS");
     NS_LOG_INFO("Node " << m_node->GetId() << " receives data packet with : RecvSeq = " << seq << ", size = " << size);
+
+
+	 // 直接使用流ID进行统计
+    std::string flowId = "flow_" + std::to_string(q->m_flow_id);
+    recordPacketReception(flowId, seq, size, q->ReceiverNextExpectedSeq);
+
 		if (Irn::mode == Irn::Mode::NACK)
-		{
+		{ //std::cout << "NACK_MODE_RETURN" << std::endl;
+
+			 // NACK模式下的乱序检测
+        if (seq > q->ReceiverNextExpectedSeq) {
+            //std::cout << "NACK_REORDER: Flow " << q->m_flow_id << " detected out-of-order!" << std::endl;
+            recordReorderPacket(q, seq, size);
+        }
+
 			return ReceiverSequenceCheckResult::ACTION_NACK;
 		}
-		
+		//std::cout << "IRN_OPT "<< std::endl;
 		uint32_t expected = q->ReceiverNextExpectedSeq;
     if (seq == expected || (seq < expected && seq + size >= expected))
 		{
@@ -3894,7 +3919,7 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 		qp->laps.m_nxtRateDecTimeInNs = Simulator::Now().GetNanoSeconds() + nxtDecTimeInNs;
 		Time oldSendingTime = Seconds(qp->laps.m_curRate.CalculateTxTime(qp->lastPktSize));
 		qp->laps.m_tgtRate = std::max(m_minRate, qp->laps.m_curRate);
-		qp->laps.m_curRate = std::max(m_minRate, qp->laps.m_curRate / 2);
+		qp->laps.m_curRate = std::max(m_minRate, qp->laps.m_curRate /2);
 		qp->laps.m_incStage = 0;
 		Time newSendingTime = Seconds(qp->laps.m_curRate.CalculateTxTime(qp->lastPktSize));
 		int64_t timeGap = newSendingTime.GetNanoSeconds() - oldSendingTime.GetNanoSeconds();
@@ -4266,35 +4291,32 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 					RdmaSmartFlowRouting::record_all_port_utilization_rate[nodeId][portId].push_back(port_utilization_rate);
 					//===================更新带宽平均利用率==========================================
 					//粗略将没用的丢弃,看看效果
-					if(utilization!=0){
-							 double avg_utilization_rate=RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].utilization_rate;
+					//std::cout<<"nodeId:"<<nodeId<<" portId:"<<portId<<" utilization:"<<utilization<<std::endl;
+					double avg_utilization_rate=RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].utilization_rate;
 					 uint32_t update_count=RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].update_count;
-                    RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].utilization_rate=(double)( avg_utilization_rate*update_count + utilization)/(update_count+1);
+                    RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].utilization_rate=(double)(avg_utilization_rate*update_count + utilization)/(update_count+1);
 					RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].update_count++;
-					}
+					
 
 					//添加计算交换机高负载端口平均队列长度 ---二月六号
-					if(utilization>0.8&&RdmaSmartFlowRouting::record_all_port_queue_len[nodeId][portId].size()!=0&&node->GetNodeType() != 0 ){
-						uint32_t sum_queue_len=0;
-                       uint32_t size1=RdmaSmartFlowRouting::record_all_port_queue_len[nodeId][portId].size();
-					   uint32_t count=RdmaSmartFlowRouting::avg_port_length.count;
+					// if(utilization>0.8&&RdmaSmartFlowRouting::record_all_port_queue_len[nodeId][portId].size()!=0&&node->GetNodeType() != 0 ){
+					// 	uint32_t sum_queue_len=0;
+                    //    uint32_t size1=RdmaSmartFlowRouting::record_all_port_queue_len[nodeId][portId].size();
+					//    uint32_t count=RdmaSmartFlowRouting::avg_port_length.count;
 
-						for(uint32_t i=0;i<size1;i++){
-							sum_queue_len+=RdmaSmartFlowRouting::record_all_port_queue_len[nodeId][portId][i].length;
-						}
+					// 	for(uint32_t i=0;i<size1;i++){
+					// 		sum_queue_len+=RdmaSmartFlowRouting::record_all_port_queue_len[nodeId][portId][i].length;
+					// 	}
 
-                         double avg_queue_len=(double)(count*(RdmaSmartFlowRouting::avg_port_length.now_avg_port_length)+sum_queue_len)/(count+size1);
-                         RdmaSmartFlowRouting::avg_port_length.now_avg_port_length=avg_queue_len;
-						 RdmaSmartFlowRouting::avg_port_length.count+=size1;
+                    //      double avg_queue_len=(double)(count*(RdmaSmartFlowRouting::avg_port_length.now_avg_port_length)+sum_queue_len)/(count+size1);
+                    //      RdmaSmartFlowRouting::avg_port_length.now_avg_port_length=avg_queue_len;
+					// 	 RdmaSmartFlowRouting::avg_port_length.count+=size1;
                      
-					}
+					// }
 				
 					//std::cout<<"时间 "<<Simulator::Now().GetNanoSeconds()<<"，节点 "<<nodeId<<"，端口 "<<portId<<"，平均利用率 "<<RdmaSmartFlowRouting::record_all_port_avg_utilization_rate[nodeId][portId].utilization_rate<<std::endl;
 					//===================更新带宽平均利用率==========================================
-					if(nodeId==1&&portId==1){
-						//std::cout<<"时间 "<<Simulator::Now().GetNanoSeconds()<<"，节点 "<<nodeId<<"，端口 "<<portId<<"，利用率 "<<utilization<<std::endl;
-					
-					}
+				
 					
 					//端口记录重置数据
 					// std::cout<<4<<std::endl;
@@ -4361,6 +4383,56 @@ ReceiverSequenceCheckResult RdmaHw::ReceiverCheckSeqForLaps(uint32_t seq, Ptr<Rd
 
               //=============================更新各端口带宽利用率============================================
 	 }
+	 // 修改统计函数，直接使用流ID
+void RdmaHw::recordReorderPacket(Ptr<RdmaRxQueuePair> q, uint32_t seq, uint32_t size) {
+    // 直接使用现成的流ID，简单高效
+    std::string flowId = "flow_" + std::to_string(q->m_flow_id);
+    
+   
+    
+    auto it = reorderDistTbl.find(flowId);
+    if (it == reorderDistTbl.end()) {
+        reorderDistEntry entry(seq, size);
+        entry.startTime = Simulator::Now().GetNanoSeconds();
+        reorderDistTbl[flowId] = entry;
+        //std::cout << "NEW_FLOW: Created entry for flow " << q->m_flow_id << std::endl;
+    } else {
+        it->second.counter++;
+        it->second.size += size;
+        it->second.lastTime = Simulator::Now().GetNanoSeconds();
+        
+        if (seq >= it->second.maxValue) {
+            it->second.maxIndex = it->second.counter;
+            it->second.maxValue = seq;
+        } else {
+            // 计算乱序程度
+            uint32_t gap = (it->second.maxValue - 1 - seq) / 1000 + 1;
+            if (it->second.freq.size() < gap) {
+                it->second.freq.resize(gap, 0);
+            }
+            it->second.freq[gap - 1]++;
+           // std::cout << "REORDER_COUNT: Flow=" << q->m_flow_id << ", gap=" << gap 
+             //         << ", total=" << it->second.freq[gap - 1] << std::endl;
+        }
+    }
+}
+
+// 简化的包接收记录
+void RdmaHw::recordPacketReception(const std::string& flowId, uint32_t seq, uint32_t size, uint32_t expectedSeq) {
+    //std::cout << "PACKET_RECV: Flow=" << flowId << ", seq=" << seq 
+     //         << ", expected=" << expectedSeq << ", size=" << size << std::endl;
+    
+    auto it = reorderDistTbl.find(flowId);
+    if (it == reorderDistTbl.end()) {
+        reorderDistEntry entry(seq, size);
+        entry.startTime = Simulator::Now().GetNanoSeconds();
+        reorderDistTbl[flowId] = entry;
+    } else {
+        it->second.counter++;
+        it->second.size += size;
+        it->second.lastTime = Simulator::Now().GetNanoSeconds();
+    }
+}
 
 
 
